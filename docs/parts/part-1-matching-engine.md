@@ -51,11 +51,19 @@ A `Trade` has: `bidOrderId`, `askOrderId`, `buyerId`, `sellerId`, `copyId`, `gra
 
 - `MIN_PRICE_CENTS = 100` ($1.00) and `MAX_PRICE_CENTS = 1_000_000` ($10,000.00).
 - `parseDollars("40.5")` returns `4050`. Accept `"40"`, `"40.5"` and `"40.50"`; reject `"40.505"`, `"-1"`, `"abc"` and
-  `""`. Do it with string splitting, not `parseFloat`.
+  `""` by returning `null`. Do it with string splitting, not `parseFloat`.
 - `formatCents(4050)` returns `"40.50"`.
-- `validateOrder(order)` throws an error with a clear message for a bad side, a price outside the limits or not whole
-  cents, a grade or minimum grade outside 1 to 8, a bid without `minGrade`, or an ask without `copyId` and `grade`.
-  Zod is already installed if you want it.
+- `validateOrder(order)` throws a `ZodError` with a clear message for a bad side, a price outside the limits or not
+  whole cents, a grade or minimum grade outside 1 to 8, a bid without `minGrade`, or an ask without `copyId` and `grade`.
+  `errorHandler` turns that into a 400 with per-field messages. It returns only the fields it checked.
+
+## What the book refuses
+
+`add()` and `match()` throw if an order's ids, price, time or grade aren't whole numbers. **Convert database rows with
+`Number()` first:** `pg` returns `bigint` columns as strings, and a string `userId` would slip past the self-trade rule.
+They also throw for an order id already in the book or a second open ask for the same copy, `add()` throws for a targeted
+order, and `apply()` throws if the resting order it should fill has gone. These all mean a bug in our code, so they're
+plain errors rather than messages for users.
 
 ## Not in Part 1
 
