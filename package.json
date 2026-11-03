@@ -1,0 +1,46 @@
+{
+  "name": "revinyl-exchange",
+  "private": true,
+  "type": "module",
+  "description": "reVINYL: a record exchange printed like a 1960s newspaper. Play money only.",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch --env-file-if-exists=.env server/src/index.js",
+    "dev:client": "vite --config client/vite.config.js",
+    "build": "vite build --config client/vite.config.js",
+    "start": "node --env-file-if-exists=.env server/src/index.js",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "node --env-file-if-exists=.env server/src/db/migrate.js",
+    "test": "vitest run --project unit --project client",
+    "test:integration": "vitest run --project integration",
+    "test:all": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@fontsource/league-gothic": "^5.3.0",
+    "@fontsource/libre-franklin": "^5.3.0",
+    "@fontsource/merriweather": "^5.3.0",
+    "@fontsource/old-standard-tt": "^5.3.0",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.3",
+    "helmet": "^8.3.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "happy-dom": "^21.0.4",
+    "prettier": "^3.9.10",
+    "supertest": "^7.3.1",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  }
+}
