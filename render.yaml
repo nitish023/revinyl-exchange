@@ -1,0 +1,22 @@
+# Render free web service. The database is Neon's free plan (Render's free
+# Postgres expires after 30 days). Set DATABASE_URL and DISCOGS_TOKEN in the
+# Render dashboard; they are never committed.
+services:
+  - type: web
+    name: revinyl
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '22'
+      - key: DATABASE_URL
+        sync: false
+      - key: DISCOGS_TOKEN
+        sync: false
+      - key: DISCOGS_USER_AGENT
+        value: reVINYL/0.1 (+https://github.com/nitish023/revinyl-exchange)

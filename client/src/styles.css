@@ -1,0 +1,1182 @@
+/*
+ * reVINYL, the newspaper look (design v2, "The Paper").
+ * Plain CSS, no framework. Every page is built from the pieces below:
+ *   tokens · base · page shell (masthead, sections, footer) · type (kicker,
+ *   headline, deck, label) · rules · buttons and forms · covers · states ·
+ *   then one block per page.
+ * Covers print in black and white like a 60s newspaper photo and come into
+ * color when you hover or focus them, and the record slides out of its sleeve.
+ */
+
+/* ---------- Tokens ---------- */
+
+:root {
+  --paper: #ece6d5;
+  --ink: #1e1c19;
+  --ink-soft: rgba(30, 28, 25, 0.72);
+  --rule: rgba(30, 28, 25, 0.35);
+  --rule-dotted: rgba(30, 28, 25, 0.5);
+  --spot-red: #8b1e12; /* errors only, like a second ink color */
+
+  --font-head: 'Old Standard TT', 'Times New Roman', serif;
+  --font-gothic: 'League Gothic', 'Arial Narrow', sans-serif;
+  --font-label: 'Libre Franklin', 'Franklin Gothic Medium', 'Arial', sans-serif;
+  --font-body: 'Merriweather', Georgia, serif;
+
+  --page-width: 1180px;
+  --gutter: 48px;
+  --space-section: 104px;
+
+  color-scheme: light;
+}
+
+/* ---------- Base ---------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background-color: var(--paper);
+  /* Faint paper grain. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .15 0 0 0 0 .13 0 0 0 0 .08 0 0 0 .10 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  /* Ink spreads a little on newsprint. */
+  text-shadow: 0 0 0.5px rgba(30, 28, 25, 0.55);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+figure,
+dl,
+dd {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 4px;
+}
+
+img {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.page {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* ---------- Page shell ---------- */
+
+.masthead {
+  padding-top: 28px;
+}
+
+.masthead-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  gap: 24px;
+  padding-bottom: 10px;
+}
+
+.masthead-date {
+  font-family: var(--font-head);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nameplate {
+  font-family: var(--font-head);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.nameplate-re {
+  font-style: italic;
+}
+.nameplate-vinyl {
+  font-weight: 700;
+}
+
+.masthead-account {
+  justify-self: end;
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+
+/* The front page gets the full-size nameplate and a folio line. */
+.masthead--front .masthead-top {
+  align-items: end;
+}
+.masthead--front .nameplate {
+  font-size: 100px;
+  line-height: 0.9;
+}
+.masthead--front .masthead-date {
+  font-style: italic;
+  font-size: 15px;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.35;
+}
+.masthead-folio {
+  display: none;
+}
+.masthead--front .masthead-folio {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 7px 0;
+  border-top: 1px solid var(--ink);
+  font-family: var(--font-head);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 44px;
+  padding-top: 14px;
+}
+.section-links a,
+.masthead-account a,
+.masthead-account button {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.section-links a[aria-current='page'],
+.section-links a:hover,
+.masthead-account a:hover,
+.masthead-account button:hover {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.masthead-account button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.masthead-user {
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 15px;
+}
+
+.site-footer {
+  margin-top: 96px;
+  padding: 12px 0 40px;
+  border-top: 1px solid var(--ink);
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+/* ---------- Rules ---------- */
+
+/* The thick-and-thin "Oxford rule" papers put under the nameplate. */
+.rule-double {
+  height: 6px;
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+/* ---------- Type ---------- */
+
+.kicker {
+  font-family: var(--font-gothic);
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.headline {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 54px;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.banner {
+  font-family: var(--font-gothic);
+  font-weight: 400;
+  font-size: 104px;
+  line-height: 0.9;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.deck {
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.label {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.byline {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.page-head {
+  padding: 64px 0 48px;
+  text-align: center;
+}
+.page-head .headline {
+  max-width: 20ch;
+  margin: 16px auto 0;
+}
+.page-head .deck,
+.page-head .byline {
+  margin-top: 14px;
+}
+
+/* A section title with a heavy rule under it: "CLASSIFIEDS ........ cheapest first" */
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding-bottom: 8px;
+  border-bottom: 3px solid var(--ink);
+}
+.section-head h2 {
+  font-family: var(--font-gothic);
+  font-weight: 400;
+  font-size: 48px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.section-head p {
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 15px;
+}
+
+/* A smaller section title for facts and lists. */
+.subhead {
+  padding-bottom: 6px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.attribution {
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.link-arrow {
+  font-family: var(--font-label);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------- Buttons and forms ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  text-shadow: none;
+  cursor: pointer;
+}
+.button:hover {
+  background: #000;
+}
+.button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.button--block {
+  width: 100%;
+}
+.button--quiet {
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.button--quiet:hover {
+  background: none;
+}
+
+.field + .field {
+  margin-top: 22px;
+}
+.field label {
+  display: block;
+  margin-bottom: 4px;
+}
+.input {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+}
+.input:focus-visible {
+  outline: none;
+  border-bottom-width: 3px;
+  padding-bottom: 4px;
+}
+.input[aria-invalid='true'] {
+  border-bottom-color: var(--spot-red);
+}
+.field-hint {
+  margin-top: 6px;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 14px;
+}
+.field-error {
+  margin-top: 6px;
+  color: var(--spot-red);
+  font-family: var(--font-label);
+  font-size: 13px;
+  font-weight: 700;
+}
+.field-error:empty {
+  display: none;
+}
+.form-banner {
+  margin-bottom: 22px;
+  padding: 10px 14px;
+  border-left: 4px solid var(--spot-red);
+  color: var(--spot-red);
+  font-family: var(--font-label);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* A clip-out coupon box with a dashed border and scissors. */
+.coupon {
+  position: relative;
+  padding: 30px 28px 26px;
+  border: 2px dashed var(--ink);
+}
+.coupon::before {
+  content: '\2702';
+  position: absolute;
+  top: -14px;
+  left: 16px;
+  padding: 0 6px;
+  background: var(--paper);
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ---------- Covers ---------- */
+
+/*
+ * <div class="cover"> holds the record (a disc behind) and the sleeve (the
+ * Discogs image, or a drawn sleeve when there is none). The sleeve prints in
+ * black and white with halftone dots until you hover or focus its card.
+ */
+.cover {
+  position: relative;
+  width: 84%;
+  aspect-ratio: 1;
+}
+.cover--large {
+  width: 86%;
+}
+.cover-disc {
+  position: absolute;
+  top: 3%;
+  left: 3%;
+  width: 94%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    var(--paper) 0 1.8%,
+    var(--label-color, #e9a23b) 2.2% 16.5%,
+    #141210 17% 100%
+  );
+  transition: transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.cover-sleeve {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #3a3631;
+}
+.cover-sleeve img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cover-sleeve--drawn {
+  /* No cover art: a plain sleeve with a printed band and a ring. */
+  background:
+    radial-gradient(
+      circle at 58% 44%,
+      transparent 0 21%,
+      var(--paper) 21.5% 25%,
+      transparent 25.5%
+    ),
+    linear-gradient(90deg, rgba(236, 230, 213, 0.9) 0 9%, #4a443c 9% 100%);
+}
+.halftone {
+  filter: grayscale(1) contrast(1.2) brightness(1.04);
+  transition: filter 600ms ease;
+}
+.halftone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(20, 18, 15, 0.34) 0.9px, transparent 1.35px) 0 0 / 4px
+    4px;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
+
+.record-card:hover .halftone,
+.record-card:focus-visible .halftone,
+.cover--large:hover .halftone {
+  filter: none;
+}
+.record-card:hover .halftone::after,
+.record-card:focus-visible .halftone::after,
+.cover--large:hover .halftone::after {
+  opacity: 0.15;
+}
+.record-card:hover .cover-disc,
+.record-card:focus-visible .cover-disc,
+.cover--large:hover .cover-disc {
+  transform: translateX(26%);
+}
+
+/* On touch screens there is no hover, so covers simply show in color. */
+@media (hover: none) {
+  .halftone {
+    filter: saturate(0.85) contrast(1.05);
+  }
+  .halftone::after {
+    opacity: 0.2;
+  }
+  .cover-disc {
+    transform: translateX(14%);
+  }
+}
+
+/* ---------- Record cards (search results, shelves) ---------- */
+
+.record-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 1fr));
+  gap: 56px 40px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.record-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-decoration: none;
+}
+.record-title {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.15;
+}
+.record-artist {
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.4;
+}
+.record-meta {
+  margin-top: 4px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.record-status {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-label);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ---------- Grade scale ---------- */
+
+.grade-scale {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+.grade-scale li::before {
+  content: '';
+  display: block;
+  height: 6px;
+  margin-bottom: 3px;
+  background: rgba(30, 28, 25, 0.25);
+}
+.grade-scale li.grade-collectible::before {
+  background: var(--ink);
+}
+.grade-scale abbr {
+  text-decoration: none;
+}
+
+/* ---------- Loading, error and empty states ---------- */
+
+.state {
+  padding: 48px 0;
+  text-align: center;
+}
+.state-title {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.2;
+}
+.state p + p,
+.state-title + * {
+  margin-top: 10px;
+}
+.state-hint {
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 17px;
+}
+.state-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 17px;
+}
+.state-error .state-title {
+  color: var(--spot-red);
+}
+.state .button {
+  margin-top: 18px;
+}
+
+/* A small spinning record. */
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    var(--paper) 0 8%,
+    var(--ink) 9% 30%,
+    var(--paper) 31% 34%,
+    var(--ink) 35% 100%
+  );
+  animation: spin 1.6s linear infinite;
+}
+.spinner::after {
+  content: '';
+  display: block;
+  width: 40%;
+  height: 6%;
+  margin: 47% 0 0 55%;
+  background: var(--paper);
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Pager ---------- */
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-top: 80px;
+  padding-top: 14px;
+  border-top: 3px solid var(--ink);
+}
+.pager a {
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 24px;
+}
+
+/* ---------- Front page ---------- */
+
+.front-banner {
+  padding: 72px 0 0;
+  text-align: center;
+}
+.front-banner .banner {
+  max-width: 15ch;
+  margin: 18px auto 0;
+}
+.front-banner .deck {
+  max-width: 36ch;
+  margin: 22px auto 0;
+  font-size: 24px;
+}
+.front-search {
+  margin-top: 48px;
+}
+
+.columns-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 40px;
+}
+.columns-3 > * {
+  padding: 0 32px;
+}
+.columns-3 > * + * {
+  border-left: 1px solid var(--ink);
+}
+.columns-3 > :first-child {
+  padding-left: 0;
+}
+.columns-3 > :last-child {
+  padding-right: 0;
+}
+.column-head {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1.15;
+}
+.column-body {
+  margin-top: 12px;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.front-how,
+.front-grades {
+  margin-top: var(--space-section);
+}
+.front-grades .grade-scale {
+  max-width: 520px;
+  margin-top: 28px;
+  font-size: 12px;
+}
+.grade-glossary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px 40px;
+  margin-top: 28px;
+}
+.grade-glossary dt {
+  font-family: var(--font-label);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+.grade-glossary dd {
+  font-size: 15px;
+}
+
+/* ---------- Search ---------- */
+
+.search-form {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  max-width: 820px;
+  margin: 0 auto;
+  padding-bottom: 6px;
+  border-bottom: 3px solid var(--ink);
+}
+.search-form .label {
+  white-space: nowrap;
+}
+.search-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 64px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 48px;
+}
+.search-input::placeholder {
+  color: rgba(30, 28, 25, 0.38);
+  font-size: 34px;
+  font-weight: 400;
+  font-style: italic;
+}
+.search-input:focus-visible {
+  outline: none;
+}
+.search-form:focus-within {
+  border-bottom-width: 5px;
+  padding-bottom: 4px;
+}
+.search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 40px;
+  max-width: 820px;
+  margin: 28px auto 0;
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 0;
+}
+.filter-group .label {
+  margin-right: 12px;
+  font-size: 11px;
+}
+.filter-group a {
+  text-decoration: none;
+}
+.filter-group a + a::before {
+  content: '\00b7';
+  display: inline-block;
+  padding: 0 8px;
+}
+.filter-group a[aria-current='true'] {
+  font-weight: 800;
+  text-decoration: underline;
+}
+.year-filter {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.year-filter input {
+  width: 72px;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-label);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.year-filter button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.result-count {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 24px;
+  margin: 72px 0 48px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
+}
+.result-count strong {
+  font-family: var(--font-head);
+  font-size: 22px;
+  font-weight: 400;
+}
+.result-count strong b {
+  font-weight: 700;
+}
+.result-count span {
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 16px;
+}
+
+/* ---------- Pressing page ---------- */
+
+.release-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 64px;
+  align-items: start;
+}
+.release-record {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+.cutline {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.cutline .label {
+  font-size: 11px;
+}
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 20px;
+  margin-top: 10px;
+  font-family: var(--font-label);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.facts dt {
+  font-weight: 700;
+}
+.facts-credit {
+  margin-top: 12px;
+}
+.tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 32px;
+  margin-top: 6px;
+}
+.tracks ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tracks li {
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+}
+.track-pos,
+.track-time {
+  padding-top: 2px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.track-pos {
+  flex: none;
+  width: 28px;
+  font-weight: 700;
+}
+.track-title {
+  flex: 1;
+}
+
+.release-market {
+  padding-left: 48px;
+  border-left: 1px solid var(--ink);
+}
+.market-guide {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 0 8px;
+}
+.market-guide .grade-scale {
+  flex: none;
+  width: 220px;
+}
+.market-guide p {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.market-empty {
+  margin-top: 28px;
+  padding: 40px 0;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  text-align: center;
+}
+.market-empty .state-title {
+  font-size: 24px;
+}
+.market-empty p + p {
+  margin-top: 8px;
+}
+
+/* ---------- Log in and sign up ---------- */
+
+.auth-page {
+  display: flex;
+  justify-content: center;
+  padding-top: 64px;
+}
+.auth-card {
+  width: min(100%, 480px);
+}
+.auth-card .kicker {
+  display: block;
+  text-align: center;
+}
+.auth-card .headline {
+  margin-top: 10px;
+  font-size: 40px;
+  text-align: center;
+}
+.auth-card .deck {
+  margin: 10px 0 28px;
+  font-size: 17px;
+  text-align: center;
+}
+.auth-card form .button {
+  margin-top: 28px;
+}
+.auth-footer {
+  margin-top: 22px;
+  font-family: var(--font-label);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- Not found ---------- */
+
+.not-found {
+  padding: 96px 0 0;
+  text-align: center;
+}
+.not-found .banner {
+  font-size: 160px;
+}
+.not-found .headline {
+  margin-top: 12px;
+}
+.not-found .deck {
+  margin-top: 12px;
+}
+.not-found .button {
+  margin-top: 32px;
+}
+
+/* ---------- Phones and small tablets ---------- */
+
+@media (max-width: 860px) {
+  :root {
+    --gutter: 16px;
+    --space-section: 72px;
+  }
+  .masthead {
+    padding-top: 14px;
+  }
+  .masthead-top {
+    grid-template-columns: 1fr auto;
+    gap: 8px 16px;
+  }
+  .masthead-date {
+    display: none;
+  }
+  .nameplate,
+  .masthead--front .nameplate {
+    font-size: 30px;
+  }
+  .masthead--front .masthead-folio {
+    font-size: 11px;
+  }
+  .masthead--front .masthead-folio span:last-child {
+    display: none;
+  }
+  .section-links {
+    gap: 8px 22px;
+  }
+  .banner {
+    font-size: 64px;
+  }
+  .headline {
+    font-size: 34px;
+  }
+  .page-head {
+    padding: 40px 0 32px;
+  }
+  .section-head h2 {
+    font-size: 38px;
+  }
+  .front-banner {
+    padding-top: 40px;
+  }
+  .front-banner .deck {
+    font-size: 19px;
+  }
+  .columns-3 {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .columns-3 > * {
+    padding: 0;
+  }
+  .columns-3 > * + * {
+    padding-top: 28px;
+    border-left: 0;
+    border-top: 1px solid var(--ink);
+  }
+  .search-form {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .search-form .label {
+    width: 100%;
+  }
+  .search-input {
+    font-size: 30px;
+    min-height: 52px;
+  }
+  .search-input::placeholder {
+    font-size: 22px;
+  }
+  .result-count {
+    margin: 48px 0 32px;
+  }
+  .record-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 40px 20px;
+  }
+  .record-title {
+    font-size: 17px;
+  }
+  .release-grid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+  .release-record .cover--large {
+    width: 78%;
+    margin: 0 auto;
+  }
+  .release-market {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .market-guide {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .market-guide .grade-scale {
+    width: 100%;
+  }
+  .auth-page {
+    padding-top: 32px;
+  }
+  .coupon {
+    padding: 26px 16px 20px;
+  }
+  .not-found .banner {
+    font-size: 110px;
+  }
+}
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cover-disc,
+  .halftone,
+  .halftone::after {
+    transition: none;
+  }
+  .spinner {
+    animation: none;
+  }
+}
