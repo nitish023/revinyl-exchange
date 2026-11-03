@@ -1,0 +1,39 @@
+{
+  "pagination": {
+    "page": 1,
+    "pages": 3,
+    "per_page": 24,
+    "items": 61,
+    "urls": {}
+  },
+  "results": [
+    {
+      "id": 249504,
+      "type": "release",
+      "title": "Rick Astley - Never Gonna Give You Up",
+      "year": "1987",
+      "country": "UK",
+      "format": ["Vinyl", "7\"", "45 RPM", "Single", "Stereo"],
+      "label": ["RCA", "BMG Records (UK) Ltd."],
+      "catno": "PB 41447",
+      "thumb": "https://i.discogs.com/HG2xChKN-rIHHSfgL53W9z2vJWeFknfevpOMwSHtIaM/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTI0OTUw/NC0xMzM0NTkyMjEy/LmpwZWc.jpeg",
+      "cover_image": "https://i.discogs.com/-DPFA5hKT8i91jnjn4rLB1zSiuUBFTrGWspu1TpLV30/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTI0OTUw/NC0xMzM0NTkyMjEy/LmpwZWc.jpeg",
+      "resource_url": "https://api.discogs.com/releases/249504",
+      "uri": "/release/249504-Rick-Astley-Never-Gonna-Give-You-Up"
+    },
+    {
+      "id": 1001,
+      "type": "release",
+      "title": "Rick Astley (2) - Whenever You Need Somebody",
+      "year": "",
+      "country": "Europe",
+      "format": ["Vinyl", "LP", "Album"],
+      "label": [],
+      "catno": "none",
+      "thumb": "",
+      "cover_image": "https://i.discogs.com/spacer.gif",
+      "resource_url": "https://api.discogs.com/releases/1001",
+      "uri": "/release/1001"
+    }
+  ]
+}
