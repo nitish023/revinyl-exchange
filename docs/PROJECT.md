@@ -72,7 +72,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 
 | Week | #   | Owner    | Part                                                                                     | Status  |
 | ---- | --- | -------- | ---------------------------------------------------------------------------------------- | ------- |
-| 7    | 1   | Sauransh | Matching engine: order book per pressing, grade filter, priority rules, order rules      | ☐       |
+| 7    | 1   | Sauransh | Matching engine: order book per pressing, grade filter, priority rules, order rules      | ✅ done |
 | 7    | 2   | Nitish   | Repo setup, login and sign up, Discogs catalog, newspaper design and page shell, Neon    | ✅ done |
 | 8    | 3   | Sauransh | Crate, listings and wanted ads, held cash ($2,000 start, seller notes, cancel)           | ☐       |
 | 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ☐       |
