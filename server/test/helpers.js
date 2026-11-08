@@ -46,5 +46,6 @@ export function createTestContext() {
 
 /** Empty every table between tests (keeps the schema). */
 export async function resetDatabase(pool) {
-  await pool.query('TRUNCATE users, sessions, releases RESTART IDENTITY CASCADE');
+  await pool.query(`TRUNCATE users, sessions, releases, copies, copy_photos, orders, trades
+     RESTART IDENTITY CASCADE`);
 }

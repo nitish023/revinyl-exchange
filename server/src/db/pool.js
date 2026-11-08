@@ -1,6 +1,26 @@
 import pg from 'pg';
 
 /**
+ * pg returns bigint (int8) columns as strings, because JavaScript numbers can't hold
+ * every bigint. Ours (ids, cents, counts) stay far below 2^53, so read them as numbers:
+ * the matching engine refuses string ids and string money would compare wrongly.
+ * A value too big to be exact throws instead of being rounded. (sum() of a bigint
+ * column returns numeric, which stays a string: cast it, e.g. sum(price_cents)::bigint.)
+ */
+const INT8_OID = 20;
+const INT8_ARRAY_OID = 1016;
+const toSafeNumber = (text) => {
+  const value = Number(text);
+  if (!Number.isSafeInteger(value)) throw new RangeError(`bigint ${text} is too large`);
+  return value;
+};
+const parseInt8Array = pg.types.getTypeParser(INT8_ARRAY_OID);
+pg.types.setTypeParser(INT8_OID, toSafeNumber);
+pg.types.setTypeParser(INT8_ARRAY_OID, (text) =>
+  parseInt8Array(text).map((item) => (item === null ? null : toSafeNumber(item))),
+);
+
+/**
  * One connection pool per process. Neon (production) needs SSL, which the
  * connection string turns on with ?sslmode=require.
  * @param {string} connectionString

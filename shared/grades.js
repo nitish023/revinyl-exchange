@@ -1,7 +1,8 @@
 /**
  * Media condition grades (the Goldmine scale used by Discogs and record shops).
  * Stored as a number so "VG+ or better" is a simple `rank >= minRank` check.
- * Matching only looks at the record's grade; sleeve condition is out of scope.
+ * Matching only looks at the record's grade. A copy's sleeve is graded on the same scale
+ * (copies.sleeve_grade, see shared/copies.js) but only shown to buyers, never matched on.
  */
 export const GRADES = Object.freeze([
   { code: 'P', rank: 1, label: 'Poor' },
