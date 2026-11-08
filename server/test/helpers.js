@@ -8,6 +8,7 @@ import releaseFixture from '../src/catalog/fixtures/release-249504.json' with { 
 import searchFixture from '../src/catalog/fixtures/search-astley.json' with { type: 'json' };
 import { loadConfig } from '../src/config.js';
 import { createPool } from '../src/db/pool.js';
+import { LiveUpdates } from '../src/market/live.js';
 
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://revinyl:revinyl@localhost:5433/revinyl_test';
@@ -36,12 +37,28 @@ export class FakeCatalogSource {
   }
 }
 
+/** Remembers every live update instead of sending it, so tests can check them. */
+export class RecordingLiveUpdates extends LiveUpdates {
+  /** @type {number[]} */
+  markets = [];
+  /** @type {{ userId: number, message: object }[]} */
+  messages = [];
+
+  marketChanged(releaseId) {
+    this.markets.push(releaseId);
+  }
+
+  notifyUser(userId, message) {
+    this.messages.push({ userId, message });
+  }
+}
+
 export function createTestContext() {
   const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: TEST_DATABASE_URL });
   const pool = createPool(TEST_DATABASE_URL);
   const catalogSource = new FakeCatalogSource();
   const catalog = new CatalogService({ pool, source: catalogSource, maxAgeMs: CATALOG_MAX_AGE_MS });
-  return { config, pool, catalog, catalogSource };
+  return { config, pool, catalog, catalogSource, live: new RecordingLiveUpdates() };
 }
 
 /** Empty every table between tests (keeps the schema). */

@@ -12,6 +12,11 @@ Read this before you start a part. If a rule needs to change, change it here in 
   same messages. The server always re-checks; the browser check is only for speed.
 - **Errors:** throw `AppError(status, code, message, fields)` from `server/src/errors.js`. Anything else becomes a
   generic 500 with no details. Every error response is `{ "error": { "code", "message", "fields"? } }`.
+- **Market tables** (migration 003, shared by Parts 3 to 6): `users.cash_cents` / `held_cents` (spendable is cash
+  minus held), `copies` (grade, sleeve grade, condition flags, status `in_crate` / `listed` / `in_trade`),
+  `copy_photos`, `orders` (one open ask per copy) and `trades`. bigint columns come back from pg as numbers.
+- **Live updates:** after a commit that changes a pressing's market, call `ctx.live.marketChanged(releaseId)`, and
+  `ctx.live.notifyUser(userId, message)` for private changes. Never before the commit.
 - **Database:** plain SQL with `$1` parameters, never string-built SQL. A schema change is a new numbered file in
   `server/migrations/` (never edit one that has run anywhere). Use `withTransaction` from `server/src/db/pool.js` when
   more than one write must succeed together.
@@ -63,7 +68,7 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/catalog/search?q=&page=&format=lp\|12in\|7in&year=` | anyone | 2    |
 | GET    | `/api/releases/:id`                                       | anyone | 2    |
 
-Planned: crate, listing and wanted-ad routes (Part 3), `GET /api/releases/:id/market` and the WebSocket (Part 4), buy
+Planned: crate, listing and wanted-ad routes (Part 3, see `docs/parts/part-3-crate-and-orders.md`), `GET /api/releases/:id/market` and the WebSocket (Part 4), buy
 and sell-to routes and trade states (Part 5), collection import (Part 6).
 
 ## Build plan
