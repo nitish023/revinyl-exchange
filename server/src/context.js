@@ -6,14 +6,17 @@ import { CatalogService } from './catalog/catalogService.js';
 import { DiscogsClient } from './catalog/discogsClient.js';
 import { RateWindow } from './catalog/rateWindow.js';
 import { createPool } from './db/pool.js';
-import { LiveUpdates } from './market/live.js';
+import { findSessionUser, readCookie, SESSION_COOKIE } from './auth/sessions.js';
+import { MarketHub } from './market/hub.js';
+import { loadMarket } from './market/marketRepo.js';
 
 /**
  * @typedef {object} AppContext
  * @property {import('./config.js').Config} config
  * @property {import('pg').Pool} pool
  * @property {CatalogService} catalog
- * @property {LiveUpdates} live tells browsers what changed (Part 4 sends it over WebSocket)
+ * @property {import('./market/live.js').LiveUpdates} live tells browsers what changed. Here it's
+ *   the WebSocket hub; index.js attaches it to the HTTP server.
  */
 
 /** @param {import('./config.js').Config} config @returns {AppContext} */
@@ -35,5 +38,9 @@ export function createContext(config) {
   });
   if (!discogs.hasToken)
     console.warn('[catalog] DISCOGS_TOKEN is not set: record search is disabled');
-  return { config, pool, catalog, live: new LiveUpdates() };
+  const live = new MarketHub({
+    loadMarket: (releaseId) => loadMarket(pool, releaseId),
+    findUser: (cookieHeader) => findSessionUser(pool, readCookie(cookieHeader, SESSION_COOKIE)),
+  });
+  return { config, pool, catalog, live };
 }

@@ -58,17 +58,19 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 
 ## API so far
 
-| Method | Path                                                      | Who    | Part |
-| ------ | --------------------------------------------------------- | ------ | ---- |
-| GET    | `/api/health`                                             | anyone | 2    |
-| POST   | `/api/auth/register` `{ email, displayName, password }`   | anyone | 2    |
-| POST   | `/api/auth/login` `{ email, password }`                   | anyone | 2    |
-| POST   | `/api/auth/logout`                                        | anyone | 2    |
-| GET    | `/api/auth/me`                                            | anyone | 2    |
-| GET    | `/api/catalog/search?q=&page=&format=lp\|12in\|7in&year=` | anyone | 2    |
-| GET    | `/api/releases/:id`                                       | anyone | 2    |
+| Method | Path                                                                      | Who    | Part |
+| ------ | ------------------------------------------------------------------------- | ------ | ---- |
+| GET    | `/api/health`                                                             | anyone | 2    |
+| POST   | `/api/auth/register` `{ email, displayName, password }`                   | anyone | 2    |
+| POST   | `/api/auth/login` `{ email, password }`                                   | anyone | 2    |
+| POST   | `/api/auth/logout`                                                        | anyone | 2    |
+| GET    | `/api/auth/me`                                                            | anyone | 2    |
+| GET    | `/api/catalog/search?q=&page=&format=lp\|12in\|7in&year=`                 | anyone | 2    |
+| GET    | `/api/releases/:id`                                                       | anyone | 2    |
+| GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)               | anyone | 4    |
+| WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`) | anyone | 4    |
 
-Planned: crate, listing and wanted-ad routes (Part 3, see `docs/parts/part-3-crate-and-orders.md`), `GET /api/releases/:id/market` and the WebSocket (Part 4), buy
+Planned: crate, listing and wanted-ad routes (Part 3, see `docs/parts/part-3-crate-and-orders.md`), buy
 and sell-to routes and trade states (Part 5), collection import (Part 6).
 
 ## Build plan
@@ -80,7 +82,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | 7    | 1   | Sauransh | Matching engine: order book per pressing, grade filter, priority rules, order rules      | ✅ done |
 | 7    | 2   | Nitish   | Repo setup, login and sign up, Discogs catalog, newspaper design and page shell, Neon    | ✅ done |
 | 8    | 3   | Sauransh | Crate, listings and wanted ads, held cash ($2,000 start, seller notes, cancel)           | ☐       |
-| 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ☐       |
+| 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ✅ done |
 | 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ☐       |
 | 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ☐       |
 | 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ☐       |

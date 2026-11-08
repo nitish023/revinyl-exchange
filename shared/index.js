@@ -4,5 +4,6 @@ export * from './auth.js';
 export * from './catalog.js';
 export * from './copies.js';
 export * from './grades.js';
+export * from './market.js';
 export * from './orders.js';
 export * from './validation.js';
