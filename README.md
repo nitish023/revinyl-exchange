@@ -23,6 +23,7 @@ You need Node 22 and Docker.
 npm install
 cp .env.example .env     # then add your Discogs token (optional, needed for search)
 npm run db:up            # Postgres on port 5433, plus a separate test database
+npm run db:seed          # demo traders and market activity (password: password123)
 npm run dev              # API on :3000, site on http://localhost:5173
 ```
 
