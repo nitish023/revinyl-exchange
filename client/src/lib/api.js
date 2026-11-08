@@ -67,4 +67,5 @@ export const api = {
     return request('GET', `/catalog/search?${params}`, signal ? { signal } : {});
   },
   release: (id, signal) => request('GET', `/releases/${id}`, signal ? { signal } : {}),
+  market: (id, signal) => request('GET', `/releases/${id}/market`, signal ? { signal } : {}),
 };

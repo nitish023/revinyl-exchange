@@ -12,6 +12,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:3000',
+      // Live updates. Host is kept as-is so the server's same-site check matches the page.
+      '/ws': { target: 'ws://localhost:3000', ws: true },
     },
   },
   build: {

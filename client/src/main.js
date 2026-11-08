@@ -13,6 +13,7 @@ import '@fontsource/old-standard-tt/700.css';
 import './styles.css';
 import { masthead, siteFooter } from './components/masthead.js';
 import { h, replaceChildren } from './dom.js';
+import { live } from './lib/live.js';
 import { loginPage, registerPage } from './pages/auth.js';
 import { homePage } from './pages/home.js';
 import { notFoundPage } from './pages/notFound.js';
@@ -60,4 +61,11 @@ router.onChange((url) => {
 });
 
 await session.load();
+// The live connection knows who you are from the cookie it opened with.
+let lastUserId = session.user?.id ?? null;
+session.subscribe((user) => {
+  if ((user?.id ?? null) === lastUserId) return;
+  lastUserId = user?.id ?? null;
+  live.reconnect();
+});
 router.start();
