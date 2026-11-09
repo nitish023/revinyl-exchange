@@ -15,6 +15,10 @@ Read this before you start a part. If a rule needs to change, change it here in 
 - **Market tables** (migration 003, shared by Parts 3 to 6): `users.cash_cents` / `held_cents` (spendable is cash
   minus held), `copies` (grade, sleeve grade, condition flags, status `in_crate` / `listed` / `in_trade`),
   `copy_photos`, `orders` (one open ask per copy) and `trades`. bigint columns come back from pg as numbers.
+  A removed copy keeps its row (old orders and trades point at it) and gets `copies.removed_at` (migration 004):
+  leave out `removed_at IS NOT NULL` copies anywhere you list a user's records.
+- **Orders go through `ctx.orders`** (`server/src/orders/orderService.js`): never write `orders`, held cash or a
+  copy's status from anywhere else, or the in-memory book stops matching the database.
 - **Live updates:** after a commit that changes a pressing's market, call `ctx.live.marketChanged(releaseId)`, and
   `ctx.live.notifyUser(userId, message)` for private changes. Never before the commit.
 - **Database:** plain SQL with `$1` parameters, never string-built SQL. A schema change is a new numbered file in
@@ -58,18 +62,27 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 
 ## API so far
 
-| Method | Path                                                      | Who    | Part |
-| ------ | --------------------------------------------------------- | ------ | ---- |
-| GET    | `/api/health`                                             | anyone | 2    |
-| POST   | `/api/auth/register` `{ email, displayName, password }`   | anyone | 2    |
-| POST   | `/api/auth/login` `{ email, password }`                   | anyone | 2    |
-| POST   | `/api/auth/logout`                                        | anyone | 2    |
-| GET    | `/api/auth/me`                                            | anyone | 2    |
-| GET    | `/api/catalog/search?q=&page=&format=lp\|12in\|7in&year=` | anyone | 2    |
-| GET    | `/api/releases/:id`                                       | anyone | 2    |
+| Method | Path                                                                                                  | Who    | Part |
+| ------ | ----------------------------------------------------------------------------------------------------- | ------ | ---- |
+| GET    | `/api/health`                                                                                         | anyone | 2    |
+| POST   | `/api/auth/register` `{ email, displayName, password }`                                               | anyone | 2    |
+| POST   | `/api/auth/login` `{ email, password }`                                                               | anyone | 2    |
+| POST   | `/api/auth/logout`                                                                                    | anyone | 2    |
+| GET    | `/api/auth/me`                                                                                        | anyone | 2    |
+| GET    | `/api/catalog/search?q=&page=&format=lp\|12in\|7in&year=`                                             | anyone | 2    |
+| GET    | `/api/releases/:id`                                                                                   | anyone | 2    |
+| GET    | `/api/wallet`                                                                                         | user   | 3    |
+| GET    | `/api/crate?releaseId=`                                                                               | user   | 3    |
+| POST   | `/api/crate` `{ releaseId, grade, sleeveGrade, flags, headline, notes }`                              | user   | 3    |
+| DELETE | `/api/crate/:id`                                                                                      | user   | 3    |
+| POST   | `/api/crate/:id/photos` (the image as the body)                                                       | user   | 3    |
+| GET    | `/api/copies/:id/photos/:position`                                                                    | anyone | 3    |
+| GET    | `/api/orders?status=open\|filled\|cancelled&releaseId=`                                               | user   | 3    |
+| POST   | `/api/orders` `{ side: 'bid', releaseId, price, minGrade, note }` or `{ side: 'ask', copyId, price }` | user   | 3    |
+| DELETE | `/api/orders/:id`                                                                                     | user   | 3    |
 
-Planned: crate, listing and wanted-ad routes (Part 3, see `docs/parts/part-3-crate-and-orders.md`), `GET /api/releases/:id/market` and the WebSocket (Part 4), buy
-and sell-to routes and trade states (Part 5), collection import (Part 6).
+Planned: `GET /api/releases/:id/market` and the WebSocket (Part 4), buy and sell-to routes and trade states (Part 5),
+collection import (Part 6).
 
 ## Build plan
 
@@ -79,7 +92,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | ---- | --- | -------- | ---------------------------------------------------------------------------------------- | ------- |
 | 7    | 1   | Sauransh | Matching engine: order book per pressing, grade filter, priority rules, order rules      | ✅ done |
 | 7    | 2   | Nitish   | Repo setup, login and sign up, Discogs catalog, newspaper design and page shell, Neon    | ✅ done |
-| 8    | 3   | Sauransh | Crate, listings and wanted ads, held cash ($2,000 start, seller notes, cancel)           | ☐       |
+| 8    | 3   | Sauransh | Crate, listings and wanted ads, held cash ($2,000 start, seller notes, cancel)           | ✅ done |
 | 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ☐       |
 | 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ☐       |
 | 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ☐       |

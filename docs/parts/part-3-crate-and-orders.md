@@ -118,3 +118,17 @@ npm run db:up && npm run db:seed
 npm run test:all
 git checkout -b sauransh/part-3-crate-and-orders
 ```
+
+## As built
+
+- **Removing a copy** keeps the row and sets `copies.removed_at` (migration 004), because a copy that was ever listed
+  is named by old orders. Its photos are deleted. Only an `in_crate` copy can be removed (409 otherwise).
+- **Photos** are stored with the type read from their first bytes, not the `Content-Type` the browser claims, so a
+  renamed file is refused (415). A copy in a trade can't get new photos (409).
+- **Locks:** a bid locks the buyer's wallet then the copy it buys; an ask locks its copy then the buyer's wallet. Those
+  only meet on the same copy, so the same pressing, which the queue runs one at a time: no deadlocks.
+- **When the book and the database disagree** (the trade write finds the resting order already closed), the
+  transaction rolls back, the book for that pressing is dropped, and the next order reloads it from the database.
+- **Live messages:** `order` (with `orderId` and `status`) to each order's owner, `trade` (with `tradeId`) to buyer
+  and seller, and `wallet` to whoever's cash or hold changed. Each carries a numeric `releaseId`.
+- **Cancelling** is in the "Your ads on this pressing" list under the coupons, and on `/crate`.
