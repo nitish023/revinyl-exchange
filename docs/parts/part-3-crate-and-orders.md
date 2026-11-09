@@ -118,3 +118,22 @@ npm run db:up && npm run db:seed
 npm run test:all
 git checkout -b sauransh/part-3-crate-and-orders
 ```
+
+## As built
+
+- **Removing a copy** keeps the row and sets `copies.removed_at` (migration 004), because a copy that was ever listed
+  is named by old orders. Its photos are deleted. Only an `in_crate` copy can be removed (409 otherwise).
+- **Photos** are stored with the type read from their first bytes, not the `Content-Type` the browser claims, so a
+  renamed file is refused (415). A copy in a trade can't get new photos (409).
+- **Locks:** a bid locks the buyer's wallet then the copy it buys; an ask locks its copy then the buyer's wallet. Those
+  only meet on the same copy, so the same pressing, which the queue runs one at a time: no deadlocks.
+- **When the book and the database disagree** (the trade write finds the resting order already closed), the
+  transaction rolls back, the book for that pressing is dropped and reloaded, and the order is tried once more
+  (`BookOutOfStepError`). Any other unexpected failure also drops the book, so the next order reloads it.
+- **Limits:** a crate holds up to `MAX_COPIES_PER_USER` (300) active copies (409 `CRATE_FULL`). Adding copies and photos
+  is limited to 30 a minute per visitor, and placing or cancelling orders to 60. Notes and headlines can't contain NUL
+  characters, which Postgres can't store.
+- **Merge order:** the coupons only appear once Part 4's market section (which calls `adCoupons`) is on `main`.
+- **Live messages:** `order` (with `orderId` and `status`) to each order's owner, `trade` (with `tradeId`) to buyer
+  and seller, and `wallet` to whoever's cash or hold changed. Each carries a numeric `releaseId`.
+- **Cancelling** is in the "Your ads on this pressing" list under the coupons, and on `/crate`.

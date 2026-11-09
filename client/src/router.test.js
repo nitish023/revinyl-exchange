@@ -9,6 +9,8 @@ describe('matchRoute', () => {
     expect(matchRoute('/release/249504/')).toEqual({ name: 'release', params: { id: '249504' } });
     expect(matchRoute('/login').name).toBe('login');
     expect(matchRoute('/register').name).toBe('register');
+    expect(matchRoute('/crate').name).toBe('crate');
+    expect(matchRoute('/crate/').name).toBe('crate');
   });
 
   it('sends anything else to the 404 page', () => {

@@ -1359,6 +1359,213 @@ img {
   }
 }
 
+/* ---------- Ad coupons and the crate (Part 3) ---------- */
+
+.ad-coupons {
+  margin-top: 56px;
+}
+.ad-coupon-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+  margin-top: 28px;
+}
+.coupon-title {
+  font-family: var(--font-gothic);
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.coupon-intro,
+.coupon-footnote {
+  margin: 10px 0 18px;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.coupon-footnote {
+  margin: 12px 0 0;
+}
+.ad-coupon .button {
+  margin-top: 26px;
+}
+.coupon-done:empty,
+.coupon-flash:empty {
+  display: none;
+}
+.coupon-flash {
+  margin: 24px 0 0;
+  padding: 12px 16px;
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  font-family: var(--font-head);
+  font-size: 17px;
+}
+textarea.input {
+  min-height: 72px;
+  resize: vertical;
+}
+select.input {
+  appearance: none;
+  cursor: pointer;
+}
+.input--file {
+  font-family: var(--font-label);
+  font-size: 14px;
+}
+.choice-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.field + .choice-field,
+.choice-field + .field {
+  margin-top: 22px;
+}
+.choice-field legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+.choice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+/* .field label would make these blocks; a choice is a box and its words side by side. */
+.choice-field .choice {
+  display: inline-flex;
+  margin-bottom: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-family: var(--font-label);
+  font-size: 14px;
+  cursor: pointer;
+}
+.choice-field .choice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+.your-ads {
+  margin-top: 40px;
+}
+.your-ads ul,
+.crate-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.your-ads li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--rule-dotted);
+}
+.your-ad-price {
+  margin-left: auto;
+  font-family: var(--font-head);
+  font-weight: 700;
+}
+
+.wallet-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  padding: 24px 0;
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  text-align: center;
+}
+.wallet-amount {
+  margin: 4px 0 0;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1.1;
+}
+.crate-section {
+  margin-top: 64px;
+}
+.crate-item {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 24px;
+  align-items: start;
+  padding: 24px 0;
+  border-bottom: 1px dotted var(--rule-dotted);
+}
+.crate-item--ad {
+  grid-template-columns: 1fr auto;
+}
+.crate-title {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 22px;
+  color: inherit;
+}
+.crate-text p {
+  margin: 4px 0 0;
+}
+.crate-notes {
+  font-style: italic;
+}
+.crate-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  text-align: right;
+}
+.photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.photo-strip img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--ink);
+  filter: grayscale(1);
+}
+.photo-strip img:hover {
+  filter: none;
+}
+
+/* The masthead's account links stay on one line each, and wrap as a group on phones. */
+.masthead-account a,
+.masthead-account button {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .masthead-account {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px 14px;
+  }
+  .wallet-strip {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .crate-item {
+    grid-template-columns: 64px 1fr;
+  }
+  .crate-actions {
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
 /* ---------- Motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {

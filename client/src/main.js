@@ -15,6 +15,7 @@ import { masthead, siteFooter } from './components/masthead.js';
 import { h, replaceChildren } from './dom.js';
 import { live } from './lib/live.js';
 import { loginPage, registerPage } from './pages/auth.js';
+import { cratePage } from './pages/crate.js';
 import { homePage } from './pages/home.js';
 import { notFoundPage } from './pages/notFound.js';
 import { releasePage } from './pages/release.js';
@@ -28,6 +29,7 @@ const PAGES = {
   release: releasePage,
   login: loginPage,
   register: registerPage,
+  crate: cratePage,
   notFound: notFoundPage,
 };
 

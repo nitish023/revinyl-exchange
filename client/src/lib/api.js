@@ -30,14 +30,24 @@ export function isAbortError(error) {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
+/** The headers and body for a request: JSON for `body`, or a file sent as itself for `file`. */
+function payload(options) {
+  if (options.file !== undefined) {
+    return { headers: { 'Content-Type': options.file.type }, body: options.file };
+  }
+  if (options.body !== undefined) {
+    return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options.body) };
+  }
+  return { headers: undefined, body: undefined };
+}
+
 async function request(method, path, options = {}) {
   let response;
   try {
     response = await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
-      headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      ...payload(options),
       signal: options.signal ?? null,
     });
   } catch (error) {
@@ -68,4 +78,24 @@ export const api = {
   },
   release: (id, signal) => request('GET', `/releases/${id}`, signal ? { signal } : {}),
   market: (id, signal) => request('GET', `/releases/${id}/market`, signal ? { signal } : {}),
+
+  wallet: (signal) => request('GET', '/wallet', signal ? { signal } : {}),
+  crate: (releaseId, signal) =>
+    request(
+      'GET',
+      releaseId ? `/crate?releaseId=${releaseId}` : '/crate',
+      signal ? { signal } : {},
+    ),
+  addCopy: (input) => request('POST', '/crate', { body: input }),
+  removeCopy: (copyId) => request('DELETE', `/crate/${copyId}`),
+  uploadPhoto: (copyId, file) => request('POST', `/crate/${copyId}/photos`, { file }),
+  /** @param {{ status?: string, releaseId?: number }} filters */
+  orders: (filters = {}, signal) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    if (filters.releaseId) params.set('releaseId', String(filters.releaseId));
+    return request('GET', `/orders?${params}`, signal ? { signal } : {});
+  },
+  placeOrder: (input) => request('POST', '/orders', { body: input }),
+  cancelOrder: (orderId) => request('DELETE', `/orders/${orderId}`),
 };

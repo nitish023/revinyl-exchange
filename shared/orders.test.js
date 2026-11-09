@@ -2,7 +2,13 @@
 // server/src/market/orderBook.test.js, next to the engine that relies on them.
 import { describe, expect, it } from 'vitest';
 import { fieldErrors } from './validation.js';
-import { formatCents, parseDollars, validateOrder } from './orders.js';
+import {
+  formatCents,
+  ordersQuerySchema,
+  parseDollars,
+  placeOrderSchema,
+  validateOrder,
+} from './orders.js';
 
 describe('parseDollars', () => {
   it('ignores spaces around the number, as forms often send them', () => {
@@ -129,5 +135,57 @@ describe('validateOrder', () => {
     const fields = problems({ side: 'ask', priceCents: 1, grade: 99 });
 
     expect(Object.keys(fields).sort()).toEqual(['copyId', 'grade', 'priceCents']);
+  });
+});
+
+describe('placeOrderSchema (the body of POST /api/orders)', () => {
+  const problems = (order) => {
+    const result = placeOrderSchema.safeParse(order);
+    return result.success ? {} : fieldErrors(result.error);
+  };
+
+  it('turns a bid’s typed price into cents and fills in an empty note', () => {
+    expect(
+      placeOrderSchema.parse({ side: 'bid', releaseId: 5, price: ' 40.5 ', minGrade: 6 }),
+    ).toEqual({ side: 'bid', releaseId: 5, price: 4050, minGrade: 6, note: '' });
+  });
+
+  it('takes only the copy and price for an ask: grade and pressing come from the copy', () => {
+    const parsed = placeOrderSchema.parse({
+      side: 'ask',
+      copyId: 7,
+      price: '12',
+      grade: 8,
+      releaseId: 99,
+    });
+    expect(parsed).toEqual({ side: 'ask', copyId: 7, price: 1200 });
+  });
+
+  it('puts every problem on the field the form shows it next to', () => {
+    expect(problems({ side: 'bid', releaseId: 5, price: 40, minGrade: 6 }).price).toBe(
+      'Enter a price like 40.50',
+    );
+    expect(problems({ side: 'bid', releaseId: 5, price: '0.99', minGrade: 6 }).price).toBe(
+      'Price must be between $1.00 and $10,000.00',
+    );
+    expect(problems({ side: 'bid', price: '40', minGrade: 6 }).releaseId).toBe('Pick a pressing');
+    expect(problems({ side: 'ask', price: '40' }).copyId).toBe('Pick the copy you’re selling');
+    expect(
+      problems({ side: 'bid', releaseId: 5, price: '40', minGrade: 6, note: 'a\u0000b' }).note,
+    ).toBe('The note has a character we can’t store');
+    expect(problems({ side: 'sell', copyId: 1, price: '40' }).side).toBe(
+      'An order must be a bid or an ask',
+    );
+  });
+});
+
+describe('ordersQuerySchema (GET /api/orders filters)', () => {
+  it('reads status and pressing, and treats blanks as no filter', () => {
+    expect(ordersQuerySchema.parse({ status: 'open', releaseId: '9' })).toEqual({
+      status: 'open',
+      releaseId: 9,
+    });
+    expect(ordersQuerySchema.parse({ status: '', releaseId: '' })).toEqual({});
+    expect(ordersQuerySchema.safeParse({ status: 'lost' }).success).toBe(false);
   });
 });

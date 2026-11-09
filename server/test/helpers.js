@@ -9,6 +9,7 @@ import searchFixture from '../src/catalog/fixtures/search-astley.json' with { ty
 import { loadConfig } from '../src/config.js';
 import { createPool } from '../src/db/pool.js';
 import { LiveUpdates } from '../src/market/live.js';
+import { OrderService } from '../src/orders/orderService.js';
 
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://revinyl:revinyl@localhost:5433/revinyl_test';
@@ -64,7 +65,9 @@ export function createTestContext() {
   const pool = createPool(TEST_DATABASE_URL);
   const catalogSource = new FakeCatalogSource();
   const catalog = new CatalogService({ pool, source: catalogSource, maxAgeMs: CATALOG_MAX_AGE_MS });
-  return { config, pool, catalog, catalogSource, live: new RecordingLiveUpdates() };
+  const live = new RecordingLiveUpdates();
+  const orders = new OrderService({ pool, catalog, live });
+  return { config, pool, catalog, catalogSource, live, orders };
 }
 
 /** Empty every table between tests (keeps the schema). */

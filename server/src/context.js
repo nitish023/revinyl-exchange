@@ -9,6 +9,7 @@ import { createPool } from './db/pool.js';
 import { sessionFromCookie } from './auth/sessions.js';
 import { MarketHub } from './market/hub.js';
 import { loadMarket } from './market/marketRepo.js';
+import { OrderService } from './orders/orderService.js';
 
 /**
  * @typedef {object} AppContext
@@ -17,6 +18,7 @@ import { loadMarket } from './market/marketRepo.js';
  * @property {CatalogService} catalog
  * @property {import('./market/live.js').LiveUpdates} live tells browsers what changed. Here it's
  *   the WebSocket hub; index.js attaches it to the HTTP server.
+ * @property {OrderService} orders places and cancels orders, and keeps each pressing's book
  */
 
 /** @param {import('./config.js').Config} config @returns {AppContext} */
@@ -43,5 +45,5 @@ export function createContext(config) {
     authenticate: sessionFromCookie(pool),
     trustProxy: config.isProduction,
   });
-  return { config, pool, catalog, live };
+  return { config, pool, catalog, live, orders: new OrderService({ pool, catalog, live }) };
 }
