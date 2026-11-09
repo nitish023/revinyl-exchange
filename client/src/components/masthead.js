@@ -23,7 +23,11 @@ function accountLinks(user) {
       logout.disabled = false;
     }
   });
-  return [h('span', { class: 'masthead-user' }, user.displayName), logout];
+  return [
+    h('a', { href: '/crate' }, 'Your Crate'),
+    h('span', { class: 'masthead-user' }, user.displayName),
+    logout,
+  ];
 }
 
 /**

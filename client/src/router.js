@@ -10,6 +10,7 @@ const ROUTES = [
   { name: 'release', pattern: /^\/release\/(\d{1,15})\/?$/, keys: ['id'] },
   { name: 'login', pattern: /^\/login\/?$/ },
   { name: 'register', pattern: /^\/register\/?$/ },
+  { name: 'crate', pattern: /^\/crate\/?$/ },
 ];
 
 export function matchRoute(pathname) {
