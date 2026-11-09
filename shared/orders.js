@@ -3,6 +3,7 @@
  * Money is whole cents everywhere (4050 = $40.50), so no float rounding can creep in.
  */
 import { z } from 'zod';
+import { MAX_ORDER_NOTE_LENGTH } from './copies.js';
 import { gradeByRank, MAX_GRADE_RANK, MIN_GRADE_RANK } from './grades.js';
 
 export const MIN_PRICE_CENTS = 100;
@@ -51,7 +52,12 @@ export function formatCents(cents) {
   return `${sign}${dollars}.${remainder}`;
 }
 
-function gradeRank(label, missingMessage) {
+/**
+ * A grade rank from 1 (Poor) to 8 (Mint), with messages that name the field.
+ * @param {string} label e.g. "Minimum grade"
+ * @param {string} missingMessage shown when it's left out or isn't a number
+ */
+export function gradeRankSchema(label, missingMessage) {
   const lowest = `${MIN_GRADE_RANK} (${gradeByRank(MIN_GRADE_RANK).label})`;
   const highest = `${MAX_GRADE_RANK} (${gradeByRank(MAX_GRADE_RANK).label})`;
   const outOfRange = `${label} must be from ${lowest} to ${highest}`;
@@ -62,12 +68,23 @@ function gradeRank(label, missingMessage) {
     .max(MAX_GRADE_RANK, outOfRange);
 }
 
+/** A positive whole-number id (a pressing, copy or order), as sent in a JSON body. */
+export function idSchema(message) {
+  return z
+    .number({ error: message })
+    .int(message)
+    .positive(message)
+    .max(Number.MAX_SAFE_INTEGER, message);
+}
+
+export const priceCentsSchema = z
+  .number({ error: 'Enter a price like 40.50' })
+  .int('Price must be in whole cents')
+  .min(MIN_PRICE_CENTS, PRICE_LIMITS_MESSAGE)
+  .max(MAX_PRICE_CENTS, PRICE_LIMITS_MESSAGE);
+
 const orderFields = {
-  priceCents: z
-    .number({ error: 'Enter a price like 40.50' })
-    .int('Price must be in whole cents')
-    .min(MIN_PRICE_CENTS, PRICE_LIMITS_MESSAGE)
-    .max(MAX_PRICE_CENTS, PRICE_LIMITS_MESSAGE),
+  priceCents: priceCentsSchema,
   targetOrderId: z
     .number({ error: 'That order is not valid' })
     .int('That order is not valid')
@@ -75,18 +92,20 @@ const orderFields = {
     .optional(),
 };
 
+const MIN_GRADE_FIELD = gradeRankSchema('Minimum grade', 'Pick the lowest grade you’ll accept');
+
 export const orderSchema = z.discriminatedUnion(
   'side',
   [
     z.object({
       side: z.literal('bid'),
       ...orderFields,
-      minGrade: gradeRank('Minimum grade', 'Pick the lowest grade you’ll accept'),
+      minGrade: MIN_GRADE_FIELD,
     }),
     z.object({
       side: z.literal('ask'),
       ...orderFields,
-      grade: gradeRank('Grade', 'Pick the copy’s grade'),
+      grade: gradeRankSchema('Grade', 'Pick the copy’s grade'),
       copyId: z
         .number({ error: 'Pick the copy you’re selling' })
         .int('Pick the copy you’re selling')
@@ -107,3 +126,54 @@ export const orderSchema = z.discriminatedUnion(
 export function validateOrder(order) {
   return orderSchema.parse(order);
 }
+
+/** A price typed by a person ("40.50"), read into whole cents and range-checked. */
+const priceText = z
+  .string({ error: 'Enter a price like 40.50' })
+  .transform((text) => parseDollars(text))
+  .pipe(priceCentsSchema);
+
+/**
+ * The body of POST /api/orders, shared with the forms. `price` comes out in cents.
+ * An ask names only the copy: its pressing and grade are read from the copy on the server,
+ * never trusted from the request.
+ */
+export const placeOrderSchema = z.discriminatedUnion(
+  'side',
+  [
+    z.object({
+      side: z.literal('bid'),
+      releaseId: idSchema('Pick a pressing'),
+      price: priceText,
+      minGrade: MIN_GRADE_FIELD,
+      note: z
+        .string({ error: 'The note must be text' })
+        .trim()
+        .max(MAX_ORDER_NOTE_LENGTH, `Keep the note under ${MAX_ORDER_NOTE_LENGTH} characters`)
+        .default(''),
+    }),
+    z.object({
+      side: z.literal('ask'),
+      copyId: idSchema('Pick the copy you’re selling'),
+      price: priceText,
+    }),
+  ],
+  { error: 'An order must be a bid or an ask' },
+);
+
+export const ORDER_STATUSES = Object.freeze(['open', 'filled', 'cancelled']);
+
+/** Empty query-string values ("?status=") mean "no filter". */
+const blankAsMissing = (value) => (value === '' ? undefined : value);
+
+/** GET /api/orders?status=&releaseId= */
+export const ordersQuerySchema = z.object({
+  status: z.preprocess(
+    blankAsMissing,
+    z.enum(ORDER_STATUSES, { error: 'Status must be open, filled or cancelled' }).optional(),
+  ),
+  releaseId: z.preprocess(
+    blankAsMissing,
+    z.coerce.number().pipe(idSchema('Release ID must be a positive whole number')).optional(),
+  ),
+});
