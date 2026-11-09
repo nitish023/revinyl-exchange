@@ -3,7 +3,13 @@ import { loginSchema, registerSchema } from '../../../shared/index.js';
 import { AppError } from '../errors.js';
 import { rateLimiter } from '../http/rateLimit.js';
 import { DUMMY_HASH, verifyPassword } from './passwords.js';
-import { createSession, deleteSession, SESSION_COOKIE, sessionCookieOptions } from './sessions.js';
+import {
+  createSession,
+  deleteSession,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+  sessionIdFor,
+} from './sessions.js';
 import { findUserByEmail, registerUser } from './users.js';
 
 /**
@@ -45,6 +51,8 @@ export function authRouter(ctx, { rateLimit }) {
 
   router.post('/auth/logout', async (req, res) => {
     await deleteSession(ctx.pool, req.sessionToken);
+    // Other tabs share the cookie: close their live connections so their private updates stop.
+    if (req.sessionToken) ctx.live.sessionEnded(sessionIdFor(req.sessionToken));
     res.clearCookie(SESSION_COOKIE, sessionCookieOptions(secure));
     res.status(204).end();
   });

@@ -5,10 +5,16 @@
 import { createServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { LIVE_PATH, MarketHub } from './hub.js';
+import { LIVE_PATH, LOGGED_OUT, MarketHub } from './hub.js';
 
 const ALICE = { id: 1 };
 const BOB = { id: 2 };
+/** Cookie -> session. Alice is logged in twice: this browser and her phone. */
+const SESSIONS = {
+  'u=alice': { userId: ALICE.id, sessionId: 'alice-laptop' },
+  'u=alice-phone': { userId: ALICE.id, sessionId: 'alice-phone' },
+  'u=bob': { userId: BOB.id, sessionId: 'bob-laptop' },
+};
 
 let server;
 let hub;
@@ -22,7 +28,7 @@ async function start(options = {}) {
       loads.push(releaseId);
       return { releaseId, version: loads.length };
     },
-    findUser: async (cookie) => ({ 'u=alice': ALICE, 'u=bob': BOB })[cookie] ?? null,
+    authenticate: async (cookie) => SESSIONS[cookie] ?? null,
     coalesceMs: 20,
     log: () => {},
     ...options,
@@ -39,9 +45,9 @@ afterEach(async () => {
 });
 
 /** Open a connection that collects every message it gets. */
-async function connect({ cookie, origin, path = LIVE_PATH } = {}) {
+async function connect({ cookie, origin, path = LIVE_PATH, headers: extra = {} } = {}) {
   const { port } = server.address();
-  const headers = {};
+  const headers = { ...extra };
   if (cookie) headers.cookie = cookie;
   if (origin) headers.origin = origin;
   const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`, { headers });
@@ -221,5 +227,77 @@ describe('who may connect', () => {
   it('only answers at /ws', async () => {
     await start();
     await expect(connect({ path: '/elsewhere' })).rejects.toThrow();
+  });
+});
+
+describe('review fixes', () => {
+  it('survives a visitor resetting the connection while their session is looked up', async () => {
+    let finishLookup;
+    const lookup = new Promise((resolve) => {
+      finishLookup = resolve;
+    });
+    await start({ authenticate: () => lookup, connectionsPerIp: 1 });
+    let raw;
+    server.prependListener('upgrade', (_req, socket) => {
+      raw = socket;
+    });
+    const attempt = connect({ cookie: 'u=alice' }).catch((error) => error);
+    while (!raw) await settle(5);
+    // What a TCP reset looks like to the server. With no listener this would throw and
+    // take the process down.
+    expect(() =>
+      raw.emit('error', Object.assign(new Error('reset'), { code: 'ECONNRESET' })),
+    ).not.toThrow();
+    finishLookup(SESSIONS['u=alice']);
+    expect(await attempt).toBeInstanceOf(Error);
+    await settle(20);
+    // Nothing was handed over, and the address's slot was given back.
+    await connect();
+  });
+
+  it('closes the tabs of a session that logged out, and only that session', async () => {
+    await start();
+    const laptopTab1 = await connect({ cookie: 'u=alice' });
+    const laptopTab2 = await connect({ cookie: 'u=alice' });
+    const phone = await connect({ cookie: 'u=alice-phone' });
+    const closed = [laptopTab1, laptopTab2].map(
+      (socket) => new Promise((resolve) => socket.once('close', resolve)),
+    );
+    hub.sessionEnded('alice-laptop');
+    expect(await Promise.all(closed)).toEqual([LOGGED_OUT, LOGGED_OUT]);
+    hub.notifyUser(ALICE.id, { type: 'wallet' });
+    await messages(phone, 1);
+  });
+
+  it('does not load the market again when a tab re-subscribes to one it watches', async () => {
+    await start();
+    const socket = await connect();
+    subscribe(socket, 1);
+    subscribe(socket, 1);
+    subscribe(socket, 1);
+    await messages(socket, 1);
+    await settle();
+    expect(loads).toEqual([1]);
+    expect(socket.received).toHaveLength(1);
+  });
+
+  it('caps open connections per address, and frees a slot when one closes', async () => {
+    await start({ connectionsPerIp: 2 });
+    const first = await connect();
+    await connect();
+    await expect(connect()).rejects.toThrow(/429/);
+    first.close();
+    await settle(30);
+    await connect();
+  });
+
+  it('counts visitors behind the proxy by the address the proxy reports', async () => {
+    await start({ connectionsPerIp: 1, trustProxy: true });
+    await connect({ headers: { 'x-forwarded-for': '203.0.113.7' } });
+    await connect({ headers: { 'x-forwarded-for': '198.51.100.2' } });
+    // A visitor can't dodge the cap by adding their own entry in front.
+    await expect(
+      connect({ headers: { 'x-forwarded-for': '10.0.0.1, 203.0.113.7' } }),
+    ).rejects.toThrow(/429/);
   });
 });

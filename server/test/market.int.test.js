@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { createApp } from '../src/app.js';
-import { findSessionUser, readCookie, SESSION_COOKIE } from '../src/auth/sessions.js';
+import { sessionFromCookie, sessionIdFor } from '../src/auth/sessions.js';
 import { DEMO_PASSWORD, FIXTURE_RELEASE_ID, seedDemo } from '../src/db/seed.js';
 import { MarketHub } from '../src/market/hub.js';
 import { loadMarket } from '../src/market/marketRepo.js';
@@ -105,7 +105,7 @@ describe('live updates from the database', () => {
   beforeEach(async () => {
     hub = new MarketHub({
       loadMarket: (releaseId) => loadMarket(ctx.pool, releaseId),
-      findUser: (cookie) => findSessionUser(ctx.pool, readCookie(cookie, SESSION_COOKIE)),
+      authenticate: sessionFromCookie(ctx.pool),
       coalesceMs: 10,
       log: () => {},
     });
@@ -171,5 +171,17 @@ describe('live updates from the database', () => {
     await nextMessages(mine, 1);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(guest.received).toEqual([]);
+  });
+
+  it('closes this session’s connections when it logs out', async () => {
+    const cookie = await logIn('latenight');
+    const socket = await connect(cookie);
+    const closed = new Promise((resolve) => socket.once('close', resolve));
+    // The app under test uses ctx.live (a recorder); hand what logout announced to the hub.
+    await request(app).post('/api/auth/logout').set('Cookie', cookie).send({}).expect(204);
+    const [ended] = ctx.live.endedSessions.splice(0);
+    expect(ended).toBe(sessionIdFor(decodeURIComponent(cookie.split('=')[1])));
+    hub.sessionEnded(ended);
+    expect(await closed).toBe(4001);
   });
 });

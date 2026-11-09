@@ -43,6 +43,8 @@ export class RecordingLiveUpdates extends LiveUpdates {
   markets = [];
   /** @type {{ userId: number, message: object }[]} */
   messages = [];
+  /** @type {string[]} */
+  endedSessions = [];
 
   marketChanged(releaseId) {
     this.markets.push(releaseId);
@@ -50,6 +52,10 @@ export class RecordingLiveUpdates extends LiveUpdates {
 
   notifyUser(userId, message) {
     this.messages.push({ userId, message });
+  }
+
+  sessionEnded(sessionId) {
+    this.endedSessions.push(sessionId);
   }
 }
 

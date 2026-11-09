@@ -4,6 +4,7 @@ import { errorState, loadingState } from '../components/states.js';
 import { h, replaceChildren } from '../dom.js';
 import { api, ApiError, isAbortError } from '../lib/api.js';
 import { live } from '../lib/live.js';
+import { isNewerMarket } from '../lib/market.js';
 import { documentTitle, formatTags, labelColor, tracksBySide } from '../lib/records.js';
 import { session } from '../session.js';
 
@@ -125,13 +126,14 @@ function releaseView(release, market) {
 function followMarket(release, market, signal) {
   let latest = null;
   let mine = new Set();
+  let wasDisconnected = false;
 
   async function loadMine() {
     try {
       const response = await api.market(release.id, signal);
       if (signal.aborted) return;
       mine = new Set(response.mine.orderIds);
-      latest ??= response.market;
+      if (isNewerMarket(response.market, latest)) latest = response.market;
       market.show(latest, mine);
     } catch (error) {
       if (isAbortError(error) || signal.aborted || latest) return;
@@ -144,10 +146,18 @@ function followMarket(release, market, signal) {
 
   const stops = [
     live.watch(release.id, (next) => {
+      // Two loads can finish out of order; never put an older market over a newer one.
+      if (!isNewerMarket(next, latest)) return;
       latest = next;
       market.show(latest, mine);
     }),
-    live.onStatus((status) => market.setStatus(status)),
+    live.onStatus((status) => {
+      market.setStatus(status);
+      // Back after a drop (or after logging out in another tab): private messages may have
+      // been missed, so ask again which ads are yours.
+      if (status === 'live' && wasDisconnected) void loadMine();
+      wasDisconnected = status === 'reconnecting';
+    }),
     live.onPrivate((message) => {
       if (message.releaseId === release.id) void loadMine();
     }),

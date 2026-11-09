@@ -19,4 +19,10 @@ export class LiveUpdates {
    * @param {{ type: 'order' | 'trade' | 'wallet', releaseId?: number, [key: string]: unknown }} _message
    */
   notifyUser(_userId, _message) {}
+
+  /**
+   * A session logged out: stop sending its private messages anywhere.
+   * @param {string} _sessionId sessionIdFor(token) from server/src/auth/sessions.js
+   */
+  sessionEnded(_sessionId) {}
 }

@@ -31,8 +31,10 @@ export class LiveConnection {
   constructor({
     url,
     createSocket = (address) => new WebSocket(address),
-    setTimer = setTimeout,
-    clearTimer = clearTimeout,
+    // Wrapped, because the browser's setTimeout throws "Illegal invocation" when it's
+    // called as a method of another object (this.setTimer(...)).
+    setTimer = (fn, delay) => setTimeout(fn, delay),
+    clearTimer = (timer) => clearTimeout(timer),
   }) {
     this.url = url;
     this.createSocket = createSocket;

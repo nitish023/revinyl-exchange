@@ -2,6 +2,15 @@ import { AppError } from '../errors.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+/** The host:port an Origin header names, or null if it isn't a valid URL (treated as foreign). */
+export function originHost(origin) {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return null;
+  }
+}
+
 const crossSite = () => new AppError(403, 'CROSS_SITE', 'That request came from another website');
 
 /**
@@ -23,11 +32,5 @@ export function sameOrigin(req, _res, next) {
   }
   const origin = req.get('origin');
   if (!origin) return next();
-  let host = null;
-  try {
-    host = new URL(origin).host;
-  } catch {
-    // a malformed Origin is treated as foreign
-  }
-  next(host === req.get('host') ? undefined : crossSite());
+  next(originHost(origin) === req.get('host') ? undefined : crossSite());
 }

@@ -9,25 +9,34 @@
  * filled, their wallet changed). Who you are comes from the session cookie when the
  * connection opens, the same way the API knows.
  *
- * The rest of the server only sees the LiveUpdates methods (marketChanged, notifyUser),
- * so Part 3 code doesn't know or care that WebSockets are involved.
+ * Logging out closes that session's connections, so no other tab keeps getting its
+ * private messages (the browser reconnects as a guest).
+ *
+ * The rest of the server only sees the LiveUpdates methods (marketChanged, notifyUser,
+ * sessionEnded), so Part 3 code doesn't know or care that WebSockets are involved.
  */
 import { WebSocketServer } from 'ws';
 import { MAX_SUBSCRIPTIONS, liveRequestSchema } from '../../../shared/market.js';
+import { originHost } from '../http/sameOrigin.js';
 import { LiveUpdates } from './live.js';
 
 export const LIVE_PATH = '/ws';
 
-/** Closing codes the browser sees. 1008 = policy violation (RFC 6455). */
+/** Closing codes the browser sees. 1008 = policy violation (RFC 6455); 4000s are ours. */
 const TOO_MANY_MESSAGES = 1008;
+export const LOGGED_OUT = 4001;
 
 /**
  * @typedef {object} HubOptions
  * @property {(releaseId: number) => Promise<object>} loadMarket
- * @property {(cookieHeader: string | undefined) => Promise<{ id: number } | null>} findUser
+ * @property {(cookieHeader: string | undefined) =>
+ *   Promise<{ userId: number, sessionId: string } | null>} authenticate
+ *   who the session cookie belongs to; sessionId is what logout passes to sessionEnded()
  * @property {number} [coalesceMs] how long to gather changes before sending (default 50)
  * @property {number} [heartbeatMs] how often to check the connection is alive (default 30s)
  * @property {number} [messagesPerMinute] per connection, before it's closed (default 120)
+ * @property {number} [connectionsPerIp] open connections one address may hold (default 20)
+ * @property {boolean} [trustProxy] read the visitor's address from X-Forwarded-For (Render)
  * @property {(message: string, error?: unknown) => void} [log]
  */
 
@@ -36,6 +45,10 @@ export class MarketHub extends LiveUpdates {
   #rooms = new Map();
   /** @type {Map<number, Set<import('ws').WebSocket>>} each user's open tabs */
   #users = new Map();
+  /** @type {Map<string, Set<import('ws').WebSocket>>} the tabs opened with each session */
+  #sessions = new Map();
+  /** @type {Map<string, number>} open connections (and ones being opened) per address */
+  #perIp = new Map();
   /** @type {Set<number>} pressings changed since the last send */
   #pending = new Set();
   #timer = null;
@@ -45,18 +58,22 @@ export class MarketHub extends LiveUpdates {
   /** @param {HubOptions} options */
   constructor({
     loadMarket,
-    findUser,
+    authenticate,
     coalesceMs = 50,
     heartbeatMs = 30_000,
     messagesPerMinute = 120,
+    connectionsPerIp = 20,
+    trustProxy = false,
     log = (message, error) => console.error(`[live] ${message}`, error ?? ''),
   }) {
     super();
     this.loadMarket = loadMarket;
-    this.findUser = findUser;
+    this.authenticate = authenticate;
     this.coalesceMs = coalesceMs;
     this.heartbeatMs = heartbeatMs;
     this.messagesPerMinute = messagesPerMinute;
+    this.connectionsPerIp = connectionsPerIp;
+    this.trustProxy = trustProxy;
     this.log = log;
     // Messages from browsers are tiny ({"type":"subscribe","releaseId":123}).
     this.#wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
@@ -87,6 +104,12 @@ export class MarketHub extends LiveUpdates {
     for (const socket of this.#users.get(userId) ?? []) send(socket, text);
   }
 
+  /** @override Logging out: close every connection opened with that session. */
+  sessionEnded(sessionId) {
+    for (const socket of this.#sessions.get(sessionId) ?? [])
+      socket.close(LOGGED_OUT, 'Logged out');
+  }
+
   /** How many tabs watch a pressing (for tests and logs). */
   watchers(releaseId) {
     return this.#rooms.get(releaseId)?.size ?? 0;
@@ -103,18 +126,52 @@ export class MarketHub extends LiveUpdates {
   async #upgrade(req, socket, head) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== LIVE_PATH) return socket.destroy();
+
+    // Until handleUpgrade takes over, nothing else listens for errors on this raw socket,
+    // and an unheard 'error' (a visitor resetting the connection while we look up their
+    // session) would crash the whole server. This listener covers every path below.
+    const onSocketError = () => socket.destroy();
+    socket.on('error', onSocketError);
+
     // Browsers always send Origin on WebSockets. Another website must not be able to open
     // one with our visitor's cookie and read their private messages.
     const origin = req.headers.origin;
-    if (origin && hostOf(origin) !== req.headers.host) {
-      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
-      return;
+    if (origin && originHost(origin) !== req.headers.host) {
+      return refuse(socket, '403 Forbidden');
     }
-    const user = await this.findUser(req.headers.cookie);
-    this.#wss.handleUpgrade(req, socket, head, (ws) => this.#connected(ws, user));
+    const ip = this.#clientIp(req);
+    if ((this.#perIp.get(ip) ?? 0) >= this.connectionsPerIp) {
+      return refuse(socket, '429 Too Many Requests');
+    }
+    this.#perIp.set(ip, (this.#perIp.get(ip) ?? 0) + 1);
+    let handedOver = false;
+    try {
+      const session = await this.authenticate(req.headers.cookie);
+      if (socket.destroyed) return; // they left while we were looking
+      socket.removeListener('error', onSocketError);
+      handedOver = true;
+      this.#wss.handleUpgrade(req, socket, head, (ws) => this.#connected(ws, session, ip));
+    } finally {
+      if (!handedOver) this.#release(ip);
+    }
   }
 
-  #connected(ws, user) {
+  /** The visitor's address. Behind Render's proxy, the last X-Forwarded-For entry is the one it added. */
+  #clientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (this.trustProxy && typeof forwarded === 'string') {
+      return forwarded.split(',').at(-1).trim();
+    }
+    return req.socket.remoteAddress ?? 'unknown';
+  }
+
+  #release(ip) {
+    const count = (this.#perIp.get(ip) ?? 1) - 1;
+    if (count > 0) this.#perIp.set(ip, count);
+    else this.#perIp.delete(ip);
+  }
+
+  #connected(ws, session, ip) {
     const subscriptions = new Set();
     let alive = true;
     let windowStart = Date.now();
@@ -128,7 +185,10 @@ export class MarketHub extends LiveUpdates {
       alive = true;
     });
 
-    if (user) addTo(this.#users, user.id, ws);
+    if (session) {
+      addTo(this.#users, session.userId, ws);
+      addTo(this.#sessions, session.sessionId, ws);
+    }
 
     ws.on('message', (data, isBinary) => {
       if (Date.now() - windowStart > 60_000) {
@@ -149,7 +209,9 @@ export class MarketHub extends LiveUpdates {
         removeFrom(this.#rooms, request.releaseId, ws);
         return;
       }
-      if (!subscriptions.has(request.releaseId) && subscriptions.size >= MAX_SUBSCRIPTIONS) {
+      // Already watching: it has the market and gets every change, so don't load it again.
+      if (subscriptions.has(request.releaseId)) return;
+      if (subscriptions.size >= MAX_SUBSCRIPTIONS) {
         send(ws, JSON.stringify({ type: 'error', message: 'Watching too many pressings at once' }));
         return;
       }
@@ -160,7 +222,11 @@ export class MarketHub extends LiveUpdates {
 
     ws.on('close', () => {
       for (const releaseId of subscriptions) removeFrom(this.#rooms, releaseId, ws);
-      if (user) removeFrom(this.#users, user.id, ws);
+      if (session) {
+        removeFrom(this.#users, session.userId, ws);
+        removeFrom(this.#sessions, session.sessionId, ws);
+      }
+      this.#release(ip);
     });
     ws.on('error', (error) => this.log('connection error', error));
   }
@@ -208,12 +274,9 @@ function parseRequest(text) {
   }
 }
 
-function hostOf(origin) {
-  try {
-    return new URL(origin).host;
-  } catch {
-    return null;
-  }
+/** Answer a WebSocket request with an HTTP error and hang up. */
+function refuse(socket, status) {
+  socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
 
 function send(socket, text) {

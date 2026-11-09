@@ -98,3 +98,13 @@ export function orderIds(market) {
     ...market.wanted.map((ad) => ad.orderId),
   ]);
 }
+
+/**
+ * Should `next` replace the market on screen? Markets can arrive out of order (the one
+ * loaded when the tab subscribed may finish after the one loaded for a later trade), so
+ * keep whichever the server started loading last. asOf is an ISO date, so text order is
+ * time order. A tie is taken: both were loaded at the same moment.
+ */
+export function isNewerMarket(next, current) {
+  return !current || next.asOf >= current.asOf;
+}

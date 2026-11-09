@@ -5,6 +5,7 @@ import {
   adText,
   buyerLine,
   gradeSection,
+  isNewerMarket,
   orderIds,
   priceChange,
   sellerLine,
@@ -122,5 +123,23 @@ describe('the section', () => {
     );
     expect(adCount({ forSale: [], wanted: [] })).toBe('No ads running');
     expect(orderIds(market)).toEqual(new Set([1, 2, 3]));
+  });
+});
+
+describe('isNewerMarket', () => {
+  const at = (asOf) => ({ asOf });
+
+  it('keeps the newer market when an older one arrives late', () => {
+    const newer = at('2026-11-09T10:00:00.500Z');
+    const older = at('2026-11-09T10:00:00.200Z');
+    expect(isNewerMarket(older, newer)).toBe(false);
+    expect(isNewerMarket(newer, older)).toBe(true);
+  });
+
+  it('takes the first market, and one loaded at the same moment', () => {
+    expect(isNewerMarket(at('2026-11-09T10:00:00.000Z'), null)).toBe(true);
+    expect(isNewerMarket(at('2026-11-09T10:00:00.000Z'), at('2026-11-09T10:00:00.000Z'))).toBe(
+      true,
+    );
   });
 });
