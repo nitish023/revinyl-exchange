@@ -7,6 +7,7 @@ import {
   photoParamSchema,
 } from '../../../shared/index.js';
 import { requireUser } from '../auth/middleware.js';
+import { rateLimiter } from '../http/rateLimit.js';
 import { addCopy, addPhoto, findPhoto, listCrate, removeCopy } from './crateService.js';
 
 /**
@@ -16,8 +17,10 @@ import { addCopy, addPhoto, findPhoto, listCrate, removeCopy } from './crateServ
  * POST   /api/crate/:id/photos                 the image itself as the body -> 201 { photo }
  * GET    /api/copies/:id/photos/:position      the image (anyone: photos are shown on ads)
  */
-export function crateRouter(ctx) {
+export function crateRouter(ctx, { rateLimit }) {
   const router = Router();
+  // Adding copies and photos writes to a small free database; slow down anyone flooding it.
+  const writes = rateLimiter({ enabled: rateLimit, windowMs: 60_000, limit: 30 });
   // Only image bodies are read, and only after the login check, so nobody can make the
   // server buffer 2 MB without being logged in.
   const photoBody = express.raw({ type: [...PHOTO_TYPES], limit: MAX_PHOTO_BYTES });
@@ -27,7 +30,7 @@ export function crateRouter(ctx) {
     res.json({ copies: await listCrate(ctx.pool, req.user.id, releaseId) });
   });
 
-  router.post('/crate', requireUser, async (req, res) => {
+  router.post('/crate', requireUser, writes, async (req, res) => {
     res.status(201).json({ copy: await addCopy(ctx, req.user.id, req.body) });
   });
 
@@ -37,7 +40,7 @@ export function crateRouter(ctx) {
     res.status(204).end();
   });
 
-  router.post('/crate/:id/photos', requireUser, photoBody, async (req, res) => {
+  router.post('/crate/:id/photos', requireUser, writes, photoBody, async (req, res) => {
     const { id } = idParamSchema.parse(req.params);
     res.status(201).json({ photo: await addPhoto(ctx.pool, req.user.id, id, req.body) });
   });

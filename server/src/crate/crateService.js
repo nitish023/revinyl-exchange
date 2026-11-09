@@ -7,6 +7,7 @@ import {
   addCopySchema,
   conditionText,
   formatCents,
+  MAX_COPIES_PER_USER,
   MAX_PHOTOS_PER_COPY,
   photoTypeFromBytes,
 } from '../../../shared/index.js';
@@ -56,6 +57,18 @@ function toCopy(row) {
 export async function addCopy(ctx, userId, input) {
   const copy = addCopySchema.parse(input ?? {});
   await ctx.catalog.ensureRelease(copy.releaseId);
+  // A soft cap: two adds at the same moment could go one over, which is harmless.
+  const { rows: counted } = await ctx.pool.query(
+    'SELECT count(*) AS active FROM copies WHERE owner_id = $1 AND removed_at IS NULL',
+    [userId],
+  );
+  if (counted[0].active >= MAX_COPIES_PER_USER) {
+    throw new AppError(
+      409,
+      'CRATE_FULL',
+      `Your crate holds up to ${MAX_COPIES_PER_USER} copies. Remove one to add another.`,
+    );
+  }
   const { rows } = await ctx.pool.query(
     `INSERT INTO copies (owner_id, release_id, grade, sleeve_grade, flags, headline, notes)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,

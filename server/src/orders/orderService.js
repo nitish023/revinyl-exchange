@@ -45,6 +45,17 @@ const copyNotAvailable = () =>
     'That copy is already listed or in a trade. Only copies in your crate can be listed.',
   );
 
+/**
+ * The cached book offered a match the database no longer has (the resting order or copy
+ * changed underneath it). Thrown inside the transaction, so everything rolls back.
+ */
+export class BookOutOfStepError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'BookOutOfStepError';
+  }
+}
+
 function insufficientFunds(spendableCents, neededCents) {
   const message = `This ad needs $${formatCents(neededCents)} held, and you have $${formatCents(spendableCents)} to spend.`;
   return new AppError(400, 'INSUFFICIENT_FUNDS', message, { price: message });
@@ -107,7 +118,17 @@ export class OrderService {
     } else {
       releaseId = await this.#releaseOfMyCopy(user.id, request.copyId);
     }
-    return this.#queue.run(releaseId, () => this.#placeInQueue(user, request, releaseId));
+    return this.#queue.run(releaseId, async () => {
+      try {
+        return await this.#placeInQueue(user, request, releaseId);
+      } catch (error) {
+        if (!(error instanceof BookOutOfStepError)) throw error;
+        // #transaction dropped the stale book, so this try loads a fresh one. Only once:
+        // a fresh book can't be out of step with the database it was just read from.
+        console.warn(`[orders] ${error.message}; reloaded the book for ${releaseId} and retried`);
+        return this.#placeInQueue(user, request, releaseId);
+      }
+    });
   }
 
   /**
@@ -324,7 +345,8 @@ async function recordTrade(client, incoming, trade, releaseId) {
     [[incoming.id, restingId]],
   );
   // The book thought the resting order was open; the database says otherwise. Roll back.
-  if (rowCount !== 2) throw new Error(`Order ${restingId} is in the book but not open`);
+  if (rowCount !== 2)
+    throw new BookOutOfStepError(`Order ${restingId} is in the book but not open`);
 
   const { rows } = await client.query(
     `INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
@@ -354,6 +376,6 @@ async function recordTrade(client, incoming, trade, releaseId) {
       WHERE id = $1 AND status IN ('in_crate', 'listed') AND removed_at IS NULL`,
     [trade.copyId],
   );
-  if (copies !== 1) throw new Error(`Copy ${trade.copyId} can't go into a trade`);
+  if (copies !== 1) throw new BookOutOfStepError(`Copy ${trade.copyId} can't go into a trade`);
   return rows[0];
 }

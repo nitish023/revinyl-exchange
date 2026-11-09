@@ -11,7 +11,7 @@
  */
 import { conditionText } from '../../../shared/index.js';
 import { h, replaceChildren } from '../dom.js';
-import { api } from '../lib/api.js';
+import { api, ApiError } from '../lib/api.js';
 import { errorsFromUnknown } from '../lib/forms.js';
 import { addCopyForm, minGradeText, sellForm, wantedForm } from './adForms.js';
 import { errorState, loadingState } from './states.js';
@@ -138,6 +138,11 @@ function yourAds(orders, onDone) {
                 : 'FOR SALE ad cancelled. The copy is back in your crate.',
             );
           } catch (failure) {
+            // 409: it filled or was cancelled elsewhere first. Redraw so the list is current.
+            if (failure instanceof ApiError && failure.status === 409) {
+              await onDone(failure.message);
+              return;
+            }
             error.textContent = errorsFromUnknown(failure).message ?? 'Couldn’t cancel that ad.';
             cancel.disabled = false;
           }

@@ -9,7 +9,13 @@ import {
   MAX_NOTES_LENGTH,
   PHOTO_TYPES,
 } from './copies.js';
-import { gradeRankSchema, idSchema } from './orders.js';
+import { gradeRankSchema, idSchema, storedTextSchema } from './orders.js';
+
+/**
+ * Active copies one person can have. Far more than a real collection on the demo, and it
+ * stops one account filling the free database (each copy can carry 6 photos of 2 MB).
+ */
+export const MAX_COPIES_PER_USER = 300;
 
 /** Empty query-string values ("?releaseId=") mean "no filter". */
 const blankAsMissing = (value) => (value === '' ? undefined : value);
@@ -29,16 +35,8 @@ export const addCopySchema = z.object({
     .default([])
     // Ticking the same box twice means the same thing; keep the form's order.
     .transform((flags) => CONDITION_FLAG_CODES.filter((code) => flags.includes(code))),
-  headline: z
-    .string({ error: 'The headline must be text' })
-    .trim()
-    .max(MAX_HEADLINE_LENGTH, `Keep the headline under ${MAX_HEADLINE_LENGTH} characters`)
-    .default(''),
-  notes: z
-    .string({ error: 'The notes must be text' })
-    .trim()
-    .max(MAX_NOTES_LENGTH, `Keep the notes under ${MAX_NOTES_LENGTH} characters`)
-    .default(''),
+  headline: storedTextSchema('headline', MAX_HEADLINE_LENGTH),
+  notes: storedTextSchema('notes', MAX_NOTES_LENGTH),
 });
 
 /** GET /api/crate?releaseId= */

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { idParamSchema, ordersQuerySchema } from '../../../shared/index.js';
 import { requireUser } from '../auth/middleware.js';
+import { rateLimiter } from '../http/rateLimit.js';
 import { listMyOrders, loadWallet } from './orderRows.js';
 
 /**
@@ -9,8 +10,10 @@ import { listMyOrders, loadWallet } from './orderRows.js';
  * POST   /api/orders                       place a bid or an ask -> 201 { order, trade }
  * DELETE /api/orders/:id                   cancel -> { order }
  */
-export function ordersRouter(ctx) {
+export function ordersRouter(ctx, { rateLimit }) {
   const router = Router();
+  // Every order takes a turn in its pressing's queue; one visitor shouldn't hog it.
+  const orderWrites = rateLimiter({ enabled: rateLimit, windowMs: 60_000, limit: 60 });
 
   router.get('/wallet', requireUser, async (req, res) => {
     res.json({ wallet: await loadWallet(ctx.pool, req.user.id) });
@@ -21,11 +24,11 @@ export function ordersRouter(ctx) {
     res.json({ orders: await listMyOrders(ctx.pool, req.user.id, filters) });
   });
 
-  router.post('/orders', requireUser, async (req, res) => {
+  router.post('/orders', requireUser, orderWrites, async (req, res) => {
     res.status(201).json(await ctx.orders.place(req.user, req.body));
   });
 
-  router.delete('/orders/:id', requireUser, async (req, res) => {
+  router.delete('/orders/:id', requireUser, orderWrites, async (req, res) => {
     const { id } = idParamSchema.parse(req.params);
     res.json({ order: await ctx.orders.cancel(req.user, id) });
   });

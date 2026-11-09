@@ -4,7 +4,7 @@
  */
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_PHOTO_BYTES, STARTING_CASH_CENTS } from '../../shared/index.js';
+import { MAX_COPIES_PER_USER, MAX_PHOTO_BYTES, STARTING_CASH_CENTS } from '../../shared/index.js';
 import { createApp } from '../src/app.js';
 import { FIXTURE_RELEASE_ID, seedDemo } from '../src/db/seed.js';
 import { createTestContext, resetDatabase } from './helpers.js';
@@ -18,6 +18,11 @@ const NM = 7;
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 8, 7, 6]);
+const WEBP = Buffer.concat([
+  Buffer.from('RIFF'),
+  Buffer.from([0, 0, 0, 0]),
+  Buffer.from('WEBPVP8 '),
+]);
 
 beforeEach(async () => {
   await resetDatabase(ctx.pool);
@@ -160,6 +165,42 @@ describe('crate', () => {
     expect(await query('SELECT id FROM copies')).toEqual([]);
   });
 
+  it('refuses text Postgres can’t store with a field message, not a 500', async () => {
+    const alice = await signUp('alice');
+
+    const response = await alice
+      .post('/api/crate', {
+        releaseId: RELEASE,
+        grade: VG_PLUS,
+        sleeveGrade: null,
+        notes: 'a\u0000b',
+      })
+      .expect(400);
+    const bid = await placeBid(alice, '40', VG_PLUS, { note: 'a\u0000b' }).expect(400);
+
+    expect(response.body.error.fields.notes).toMatch(/can’t store/);
+    expect(bid.body.error.fields.note).toMatch(/can’t store/);
+  });
+
+  it('caps how many copies one crate holds', async () => {
+    const alice = await signUp('alice');
+    await addCopy(alice);
+    await query(
+      `INSERT INTO copies (owner_id, release_id, grade)
+       SELECT $1, $2, 6 FROM generate_series(1, $3)`,
+      [alice.id, RELEASE, MAX_COPIES_PER_USER - 1],
+    );
+
+    const full = await alice
+      .post('/api/crate', { releaseId: RELEASE, grade: VG_PLUS, sleeveGrade: null })
+      .expect(409);
+
+    expect(full.body.error.code).toBe('CRATE_FULL');
+    const [{ id }] = await query('SELECT id FROM copies WHERE owner_id = $1 LIMIT 1', [alice.id]);
+    await alice.del(`/api/crate/${id}`).expect(204);
+    await addCopy(alice); // a removed copy frees its place
+  });
+
   it('lists only my own copies', async () => {
     const alice = await signUp('alice');
     const bob = await signUp('bob');
@@ -239,7 +280,11 @@ describe('crate', () => {
     await bob.upload(path, PNG, 'image/png').expect(404);
     await request(app).post(path).set('Content-Type', 'image/png').send(PNG).expect(401);
 
-    for (let position = 3; position <= 6; position += 1) {
+    const webp = await alice.upload(path, WEBP, 'image/webp').expect(201);
+    expect((await request(app).get(webp.body.photo.url).expect(200)).headers['content-type']).toBe(
+      'image/webp',
+    );
+    for (let position = 4; position <= 6; position += 1) {
       await alice.upload(path, PNG, 'image/png').expect(201);
     }
     const seventh = await alice.upload(path, PNG, 'image/png').expect(409);
@@ -553,6 +598,26 @@ describe('cancelling', () => {
     expect((await walletOf(alice)).held).toBe('0.00'); // nothing given back twice
   });
 
+  it('announces a cancel to the market and to its owner', async () => {
+    const alice = await signUp('alice');
+    const bob = await signUp('bob');
+    const { order } = (await placeBid(alice, '40').expect(201)).body;
+    ctx.live.markets.length = 0;
+    ctx.live.messages.length = 0;
+
+    await alice.del(`/api/orders/${order.id}`).expect(200);
+
+    expect(ctx.live.markets).toEqual([RELEASE]);
+    expect(ctx.live.messages).toEqual([
+      {
+        userId: alice.id,
+        message: { type: 'order', releaseId: RELEASE, orderId: order.id, status: 'cancelled' },
+      },
+      { userId: alice.id, message: { type: 'wallet', releaseId: RELEASE } },
+    ]);
+    expect(ctx.live.messages.some((entry) => entry.userId === bob.id)).toBe(false);
+  });
+
   it('removes the order from the book so it can no longer match', async () => {
     const seller = await signUp('seller');
     const buyer = await signUp('buyer');
@@ -624,6 +689,32 @@ describe('keeping the book and the database in step', () => {
     expect(await walletOf(loser)).toMatchObject({ cash: '2000.00', held: '40.00' });
   });
 
+  it('the same cash can’t back two bids on different pressings at the same moment', async () => {
+    const alice = await signUp('alice');
+    await query('UPDATE users SET cash_cents = 5000 WHERE id = $1', [alice.id]);
+    await addCopy(alice); // caches the fixture pressing
+    const OTHER = 1234;
+    await query(
+      `INSERT INTO releases (id, title, artist, discogs_url) VALUES ($1, 'Other', 'Someone', $2)`,
+      [OTHER, `https://www.discogs.com/release/${OTHER}`],
+    );
+    // Slow each bid down after it locks the wallet, so the two surely overlap.
+    const slow = hookQueries((sql) => (sql.includes('INSERT INTO orders') ? 100 : null));
+
+    let responses;
+    try {
+      responses = await Promise.all([
+        placeBid(alice, '40'),
+        placeBid(alice, '40', VG_PLUS, { releaseId: OTHER }),
+      ]);
+    } finally {
+      slow.mockRestore();
+    }
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 400]);
+    expect(await walletOf(alice)).toMatchObject({ held: '40.00', spendable: '10.00' });
+  });
+
   it('a failed transaction leaves the book unchanged (match, then save, then apply)', async () => {
     const seller = await signUp('seller');
     const buyer = await signUp('buyer');
@@ -672,7 +763,7 @@ describe('keeping the book and the database in step', () => {
     expect(trade.price).toBe((cheapest.priceCents / 100).toFixed(2));
   });
 
-  it('drops a book that disagrees with the database, and the next order reloads it', async () => {
+  it('reloads a book that disagrees with the database and retries the order once', async () => {
     const seller = await signUp('seller');
     const buyer = await signUp('buyer');
     const { copy, order: ask } = await listCopy(seller, '30');
@@ -681,15 +772,20 @@ describe('keeping the book and the database in step', () => {
       ask.id,
     ]);
     await query(`UPDATE copies SET status = 'in_crate' WHERE id = $1`, [copy.id]);
-    const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
+    let placed;
+    let warnings;
     try {
-      await placeBid(buyer, '40').expect(500); // matched the stale ask; rolled back
+      // The first try matches the stale ask and rolls back; the retry uses a fresh book.
+      placed = (await placeBid(buyer, '40').expect(201)).body;
+      warnings = warn.mock.calls.length;
     } finally {
-      quiet.mockRestore();
+      warn.mockRestore();
     }
-    const { trade, order } = (await placeBid(buyer, '40').expect(201)).body;
+    const { trade, order } = placed;
 
+    expect(warnings).toBe(1);
     expect(trade).toBeNull(); // the reloaded book knows the ask is gone
     expect(order.status).toBe('open');
     expect(await query('SELECT id FROM trades')).toEqual([]);

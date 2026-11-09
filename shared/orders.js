@@ -77,6 +77,21 @@ export function idSchema(message) {
     .max(Number.MAX_SAFE_INTEGER, message);
 }
 
+/**
+ * Free text we store in Postgres: trimmed, length-limited, and without NUL characters,
+ * which Postgres can't store in a text column (without this they'd be a 500).
+ * @param {string} name how the message names the field, e.g. "headline"
+ * @param {number} max
+ */
+export function storedTextSchema(name, max) {
+  return z
+    .string({ error: `The ${name} must be text` })
+    .trim()
+    .max(max, `Keep the ${name} under ${max} characters`)
+    .refine((text) => !text.includes('\u0000'), `The ${name} has a character we can’t store`)
+    .default('');
+}
+
 export const priceCentsSchema = z
   .number({ error: 'Enter a price like 40.50' })
   .int('Price must be in whole cents')
@@ -146,11 +161,7 @@ export const placeOrderSchema = z.discriminatedUnion(
       releaseId: idSchema('Pick a pressing'),
       price: priceText,
       minGrade: MIN_GRADE_FIELD,
-      note: z
-        .string({ error: 'The note must be text' })
-        .trim()
-        .max(MAX_ORDER_NOTE_LENGTH, `Keep the note under ${MAX_ORDER_NOTE_LENGTH} characters`)
-        .default(''),
+      note: storedTextSchema('note', MAX_ORDER_NOTE_LENGTH),
     }),
     z.object({
       side: z.literal('ask'),

@@ -50,8 +50,8 @@ export function createApp(ctx, { rateLimit = true } = {}) {
   app.use('/api', authenticate(ctx.pool), sameOrigin);
   app.use('/api', authRouter(ctx, { rateLimit }));
   app.use('/api', catalogRouter(ctx, { rateLimit }));
-  app.use('/api', crateRouter(ctx));
-  app.use('/api', ordersRouter(ctx));
+  app.use('/api', crateRouter(ctx, { rateLimit }));
+  app.use('/api', ordersRouter(ctx, { rateLimit }));
   app.use('/api', (_req, _res, next) => next(notFound('Endpoint')));
 
   if (ctx.config.isProduction && existsSync(CLIENT_DIST)) {

@@ -229,3 +229,22 @@ describe('ad form helpers', () => {
     expect(photoProblem([file('big.png', 'image/png', MAX_PHOTO_BYTES + 1)])).toMatch(/over 2 MB/);
   });
 });
+
+describe('adCoupons when something changed elsewhere first', () => {
+  it('redraws after a 409 instead of leaving a dead ad on screen', async () => {
+    api.cancelOrder.mockRejectedValue(
+      new ApiError(409, 'ORDER_NOT_OPEN', 'That order has already been filled or cancelled.'),
+    );
+    const { element, onPosted } = await render();
+    api.orders.mockResolvedValue({ orders: [] }); // the server no longer lists it
+
+    element.querySelector('.your-ads button').click();
+    await settle();
+
+    expect(element.querySelector('.coupon-flash').textContent).toBe(
+      'That order has already been filled or cancelled.',
+    );
+    expect(element.querySelector('.your-ads')).toBeNull();
+    expect(onPosted).toHaveBeenCalledOnce();
+  });
+});

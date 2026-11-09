@@ -8,7 +8,7 @@ import { adLine } from '../components/adCoupons.js';
 import { cover } from '../components/cover.js';
 import { emptyState, errorState, loadingState } from '../components/states.js';
 import { h, replaceChildren } from '../dom.js';
-import { api, isAbortError } from '../lib/api.js';
+import { api, ApiError, isAbortError } from '../lib/api.js';
 import { errorsFromUnknown } from '../lib/forms.js';
 import { session } from '../session.js';
 
@@ -96,6 +96,12 @@ export const cratePage = (ctx) => {
         flash.textContent = message;
         await load();
       } catch (failure) {
+        // 409: something changed first (the ad filled, the copy went into a trade). Reload.
+        if (failure instanceof ApiError && failure.status === 409) {
+          flash.textContent = failure.message;
+          await load();
+          return;
+        }
         error.textContent = errorsFromUnknown(failure).message ?? 'That didn’t work. Try again.';
         button.disabled = false;
       }
