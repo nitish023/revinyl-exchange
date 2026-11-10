@@ -3,6 +3,7 @@
  * are fakes, so this runs without a database.
  */
 import { createServer } from 'node:http';
+import { connect as tcpConnect } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { LIVE_PATH, LOGGED_OUT, MarketHub } from './hub.js';
@@ -299,5 +300,40 @@ describe('review fixes', () => {
     await expect(
       connect({ headers: { 'x-forwarded-for': '10.0.0.1, 203.0.113.7' } }),
     ).rejects.toThrow(/429/);
+  });
+
+  it('gives the slot back when ws rejects a malformed handshake', async () => {
+    await start({ connectionsPerIp: 3 });
+    const { port } = server.address();
+    /** A WebSocket request with a missing key or a version ws doesn't speak. */
+    const malformed = (headers) =>
+      new Promise((resolve, reject) => {
+        const socket = tcpConnect(port, '127.0.0.1', () => {
+          socket.write(
+            `GET ${LIVE_PATH} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n` +
+              `Upgrade: websocket\r\nConnection: Upgrade\r\n${headers}\r\n`,
+          );
+        });
+        let reply = '';
+        socket.on('data', (chunk) => (reply += chunk));
+        socket.on('close', () => resolve(reply.split('\r\n')[0]));
+        socket.on('error', reject);
+      });
+    for (let i = 0; i < 4; i += 1) {
+      expect(await malformed('Sec-WebSocket-Version: 13\r\n')).toMatch(/400/);
+      expect(
+        await malformed('Sec-WebSocket-Version: 7\r\nSec-WebSocket-Key: dGhlIHNhbXBsZQ==\r\n'),
+      ).toMatch(/400/);
+    }
+    await settle(20);
+    // Eight rejected handshakes on a cap of three: none of them may still hold a slot.
+    await connect();
+    await connect();
+    await connect();
+  });
+
+  it('allows 100 connections per address by default', async () => {
+    await start({ connectionsPerIp: undefined });
+    expect(hub.connectionsPerIp).toBe(100);
   });
 });

@@ -35,7 +35,8 @@ export const LOGGED_OUT = 4001;
  * @property {number} [coalesceMs] how long to gather changes before sending (default 50)
  * @property {number} [heartbeatMs] how often to check the connection is alive (default 30s)
  * @property {number} [messagesPerMinute] per connection, before it's closed (default 120)
- * @property {number} [connectionsPerIp] open connections one address may hold (default 20)
+ * @property {number} [connectionsPerIp] open connections one address may hold (default 100:
+ *   a whole class demo can share one campus Wi-Fi address)
  * @property {boolean} [trustProxy] read the visitor's address from X-Forwarded-For (Render)
  * @property {(message: string, error?: unknown) => void} [log]
  */
@@ -62,7 +63,7 @@ export class MarketHub extends LiveUpdates {
     coalesceMs = 50,
     heartbeatMs = 30_000,
     messagesPerMinute = 120,
-    connectionsPerIp = 20,
+    connectionsPerIp = 100,
     trustProxy = false,
     log = (message, error) => console.error(`[live] ${message}`, error ?? ''),
   }) {
@@ -143,17 +144,17 @@ export class MarketHub extends LiveUpdates {
     if ((this.#perIp.get(ip) ?? 0) >= this.connectionsPerIp) {
       return refuse(socket, '429 Too Many Requests');
     }
+    if (socket.destroyed) return; // already gone: nothing to count
+    // The slot is given back when this TCP connection closes, however it ends: a normal
+    // close, a reset, a refusal, or ws rejecting a malformed handshake (which answers 400
+    // itself and never calls us back).
     this.#perIp.set(ip, (this.#perIp.get(ip) ?? 0) + 1);
-    let handedOver = false;
-    try {
-      const session = await this.authenticate(req.headers.cookie);
-      if (socket.destroyed) return; // they left while we were looking
-      socket.removeListener('error', onSocketError);
-      handedOver = true;
-      this.#wss.handleUpgrade(req, socket, head, (ws) => this.#connected(ws, session, ip));
-    } finally {
-      if (!handedOver) this.#release(ip);
-    }
+    socket.once('close', () => this.#release(ip));
+
+    const session = await this.authenticate(req.headers.cookie);
+    if (socket.destroyed) return; // they left while we were looking
+    socket.removeListener('error', onSocketError);
+    this.#wss.handleUpgrade(req, socket, head, (ws) => this.#connected(ws, session));
   }
 
   /** The visitor's address. Behind Render's proxy, the last X-Forwarded-For entry is the one it added. */
@@ -171,7 +172,7 @@ export class MarketHub extends LiveUpdates {
     else this.#perIp.delete(ip);
   }
 
-  #connected(ws, session, ip) {
+  #connected(ws, session) {
     const subscriptions = new Set();
     let alive = true;
     let windowStart = Date.now();
@@ -226,7 +227,6 @@ export class MarketHub extends LiveUpdates {
         removeFrom(this.#users, session.userId, ws);
         removeFrom(this.#sessions, session.sessionId, ws);
       }
-      this.#release(ip);
     });
     ws.on('error', (error) => this.log('connection error', error));
   }
