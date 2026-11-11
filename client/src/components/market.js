@@ -20,6 +20,7 @@ import {
   shortMoney,
   wantedLead,
 } from '../lib/market.js';
+import { adActions } from './adActions.js';
 import { adCoupons } from './adCoupons.js';
 import { gradeScale } from './gradeScale.js';
 import { errorState, loadingState } from './states.js';
@@ -31,7 +32,7 @@ const STATUS_TEXT = {
   reconnecting: 'Reconnecting… prices may be a moment old',
 };
 
-function adArticle({ orderId, lead, text, who, price, mine, fresh }) {
+function adArticle({ orderId, lead, text, who, price, mine, fresh, actions }) {
   return h(
     'article',
     {
@@ -49,7 +50,7 @@ function adArticle({ orderId, lead, text, who, price, mine, fresh }) {
       'p',
       { class: 'ad-foot' },
       h('span', { class: 'ad-price' }, price),
-      mine ? h('span', { class: 'ad-tag' }, 'Your ad') : null,
+      mine ? h('span', { class: 'ad-tag' }, 'Your ad') : actions,
     ),
   );
 }
@@ -63,7 +64,10 @@ function sectionHead(code, name, meaning) {
   );
 }
 
-function classifiedColumns(market, mine, isFresh) {
+/**
+ * `actionsFor(ad, kind, mine)` gives the buttons for one ad (Part 5's adActions), or null.
+ */
+function classifiedColumns(market, mine, isFresh, actionsFor) {
   const forSale = market.forSale.flatMap(({ grade, ads }) => {
     const { code, name, meaning } = gradeSection(grade);
     return [
@@ -77,6 +81,7 @@ function classifiedColumns(market, mine, isFresh) {
           price: money(ad.price),
           mine: mine.has(ad.orderId),
           fresh: isFresh(ad.orderId),
+          actions: actionsFor(ad, 'forSale', mine.has(ad.orderId)),
         }),
       ),
     ];
@@ -93,6 +98,7 @@ function classifiedColumns(market, mine, isFresh) {
             price: `Up to ${money(ad.price)}`,
             mine: mine.has(ad.orderId),
             fresh: isFresh(ad.orderId),
+            actions: actionsFor(ad, 'wanted', mine.has(ad.orderId)),
           }),
         ),
       ]
@@ -205,6 +211,8 @@ function reportSales(report) {
 export function marketSection({ release, user, onPosted }) {
   const count = h('p', {}, 'Cheapest first in each grade');
   const status = h('p', { class: 'live-status', role: 'status' });
+  // What the last Buy / Sell to them did (Part 5's adActions report it here).
+  const flash = h('p', { class: 'coupon-flash', role: 'status' });
   const body = h('div', { class: 'market-body' }, loadingState('Reading the classifieds…'));
   const coupons = h('div', { class: 'market-coupons' });
 
@@ -225,9 +233,23 @@ export function marketSection({ release, user, onPosted }) {
       ),
     ),
     status,
+    flash,
     body,
     coupons,
   );
+
+  const actionsFor = (ad, kind, mine) =>
+    adActions({
+      release,
+      ad,
+      kind,
+      user: user(),
+      mine,
+      onDone: (message) => {
+        flash.textContent = message;
+        onPosted();
+      },
+    });
 
   const reportBody = h('div', { class: 'report-grid' });
   const report = h(
@@ -254,7 +276,7 @@ export function marketSection({ release, user, onPosted }) {
       const isFresh = (orderId) => before !== null && !before.has(orderId);
       shown = market;
       count.textContent = adCount(market);
-      const columns = classifiedColumns(market, mine, isFresh);
+      const columns = classifiedColumns(market, mine, isFresh, actionsFor);
       replaceChildren(
         body,
         columns.length ? h('div', { class: 'classifieds' }, columns) : emptyMarket(),
