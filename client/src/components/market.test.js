@@ -1,4 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Part 5 fills adActions in; here a stand-in shows what the market hands it.
+vi.mock('./adActions.js', () => ({
+  adActions: vi.fn(({ ad, kind, mine }) => {
+    const button = document.createElement('button');
+    button.textContent = `${kind}:${ad.orderId}:${mine}`;
+    return button;
+  }),
+}));
 import { marketSection } from './market.js';
 
 const release = { id: 249504, title: 'Never Gonna Give You Up', artist: 'Rick Astley' };
@@ -139,5 +148,20 @@ describe('the Market Report', () => {
     view.show(market());
     expect(text(view.report)).toContain('No sales on reVINYL in the past 30 days.');
     expect(text(view.report)).toContain('Nothing has sold yet.');
+  });
+});
+
+describe('ad buttons (Part 5 hook)', () => {
+  it('asks adActions for buttons on every ad that isn’t mine, and shows them by the price', () => {
+    const view = section();
+    const wanted = [
+      { orderId: 9, price: '28.00', minGrade: 7, note: '', postedAt: '', buyer: { trades: 1 } },
+    ];
+    view.show(market({ wanted }), new Set([2]));
+    const buttons = [...view.classifieds.querySelectorAll('.ad-foot button')].map(text);
+    expect(buttons).toEqual(['forSale:1:false', 'forSale:3:false', 'wanted:9:false']);
+    expect(text(view.classifieds.querySelector('[data-order-id="2"] .ad-foot'))).toContain(
+      'Your ad',
+    );
   });
 });

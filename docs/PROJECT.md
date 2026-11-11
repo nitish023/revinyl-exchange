@@ -83,7 +83,8 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)                                           | anyone | 4    |
 | WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                             | anyone | 4    |
 
-Planned: buy and sell-to routes and trade states (Part 5), collection import (Part 6).
+Planned: buy and sell-to routes and trade states (Part 5, see `docs/parts/part-5-trades.md`), the Discogs collection
+import and the Listening Room (Part 6).
 
 ## Build plan
 
