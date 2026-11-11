@@ -58,6 +58,8 @@ export function toTradeView(row, viewerId) {
     status: row.status,
     role: row.buyer_id === viewerId ? 'buyer' : 'seller',
     createdAt: row.created_at.toISOString(),
+    shippedAt: row.shipped_at ? row.shipped_at.toISOString() : null,
+    settledAt: row.settled_at ? row.settled_at.toISOString() : null,
   };
 }
 

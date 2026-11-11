@@ -14,6 +14,7 @@ import { errorHandler, notFound } from './errors.js';
 import { sameOrigin } from './http/sameOrigin.js';
 import { marketRouter } from './market/routes.js';
 import { ordersRouter } from './orders/routes.js';
+import { tradesRouter } from './trades/routes.js';
 
 const CLIENT_DIST = fileURLToPath(new URL('../../client/dist/', import.meta.url));
 
@@ -54,6 +55,7 @@ export function createApp(ctx, { rateLimit = true } = {}) {
   app.use('/api', marketRouter(ctx));
   app.use('/api', crateRouter(ctx, { rateLimit }));
   app.use('/api', ordersRouter(ctx, { rateLimit }));
+  app.use('/api', tradesRouter(ctx, { rateLimit }));
   app.use('/api', (_req, _res, next) => next(notFound('Endpoint')));
 
   if (ctx.config.isProduction && existsSync(CLIENT_DIST)) {
