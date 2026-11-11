@@ -3,6 +3,7 @@
  *
  *   const stop = live.watch(249504, (market) => redraw(market));   // later: stop()
  *   live.onPrivate((message) => ...);       // { type: 'order' | 'trade' | 'wallet', ... }
+ *                                           // (also opens the connection, e.g. on the Listening Room)
  *   live.onStatus((status) => ...);         // 'connecting' | 'live' | 'reconnecting'
  *
  * It connects the first time something is watched, and if the connection drops it
@@ -62,8 +63,10 @@ export class LiveConnection {
     };
   }
 
+  /** Messages meant only for you. Listening opens the connection, like watching does. */
   onPrivate(listener) {
     this.#privateListeners.add(listener);
+    this.#ensureOpen();
     return () => this.#privateListeners.delete(listener);
   }
 
@@ -84,7 +87,12 @@ export class LiveConnection {
       old.onclose = null;
       old.close();
     }
-    if (this.#watchers.size > 0) this.#open();
+    if (this.#wanted()) this.#open();
+  }
+
+  /** Is anything on the page listening? With nothing, a dropped connection stays closed. */
+  #wanted() {
+    return this.#watchers.size > 0 || this.#privateListeners.size > 0;
   }
 
   #ensureOpen() {
@@ -115,7 +123,7 @@ export class LiveConnection {
   }
 
   #scheduleRetry() {
-    if (this.#watchers.size === 0) {
+    if (!this.#wanted()) {
       this.#setStatus('idle');
       return;
     }

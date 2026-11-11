@@ -163,3 +163,20 @@ describe('reconnect()', () => {
     expect(sockets[1].sent).toEqual([{ type: 'subscribe', releaseId: 1 }]);
   });
 });
+
+describe('private messages only', () => {
+  it('opens the connection for a page that only listens for private messages', () => {
+    const listener = vi.fn();
+    const stop = connection.onPrivate(listener);
+    expect(sockets).toHaveLength(1);
+    sockets[0].open();
+    sockets[0].receive({ type: 'trade', releaseId: 1, tradeId: 4 });
+    expect(listener).toHaveBeenCalledOnce();
+    sockets[0].drop();
+    expect(timers).toHaveLength(1); // still wanted, so it reconnects
+    runNextTimer();
+    stop();
+    sockets[1].drop();
+    expect(timers).toEqual([]); // nobody listening any more
+  });
+});
