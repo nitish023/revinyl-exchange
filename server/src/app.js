@@ -12,6 +12,7 @@ import { catalogRouter } from './catalog/routes.js';
 import { crateRouter } from './crate/routes.js';
 import { errorHandler, notFound } from './errors.js';
 import { sameOrigin } from './http/sameOrigin.js';
+import { marketRouter } from './market/routes.js';
 import { ordersRouter } from './orders/routes.js';
 
 const CLIENT_DIST = fileURLToPath(new URL('../../client/dist/', import.meta.url));
@@ -50,6 +51,7 @@ export function createApp(ctx, { rateLimit = true } = {}) {
   app.use('/api', authenticate(ctx.pool), sameOrigin);
   app.use('/api', authRouter(ctx, { rateLimit }));
   app.use('/api', catalogRouter(ctx, { rateLimit }));
+  app.use('/api', marketRouter(ctx));
   app.use('/api', crateRouter(ctx, { rateLimit }));
   app.use('/api', ordersRouter(ctx, { rateLimit }));
   app.use('/api', (_req, _res, next) => next(notFound('Endpoint')));

@@ -5,5 +5,6 @@ export * from './catalog.js';
 export * from './copies.js';
 export * from './crate.js';
 export * from './grades.js';
+export * from './market.js';
 export * from './orders.js';
 export * from './validation.js';

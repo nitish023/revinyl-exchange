@@ -1,9 +1,12 @@
 import { cover } from '../components/cover.js';
-import { gradeScale } from '../components/gradeScale.js';
+import { marketSection } from '../components/market.js';
 import { errorState, loadingState } from '../components/states.js';
 import { h, replaceChildren } from '../dom.js';
 import { api, ApiError, isAbortError } from '../lib/api.js';
+import { live } from '../lib/live.js';
+import { isNewerMarket } from '../lib/market.js';
 import { documentTitle, formatTags, labelColor, tracksBySide } from '../lib/records.js';
+import { session } from '../session.js';
 
 function facts(release) {
   const pressed = [release.country, release.released ?? release.year].filter(Boolean).join(', ');
@@ -63,43 +66,7 @@ function tracks(release) {
   );
 }
 
-/** The market side. Copies for sale and wanted ads arrive in Part 4; until then it explains the grades. */
-function classifieds() {
-  return h(
-    'section',
-    { class: 'release-market', 'aria-labelledby': 'classifieds-title' },
-    h(
-      'div',
-      { class: 'section-head' },
-      h('h2', { id: 'classifieds-title' }, 'Classifieds'),
-      h('p', {}, 'Cheapest first in each grade'),
-    ),
-    h(
-      'div',
-      { class: 'market-guide' },
-      gradeScale(),
-      h(
-        'p',
-        {},
-        'Grades run Poor to Mint. Most collectors buy ',
-        h('b', {}, 'VG+'),
-        ' or better: marks you can see but not hear.',
-      ),
-    ),
-    h(
-      'div',
-      { class: 'market-empty' },
-      h('p', { class: 'state-title' }, 'No copies on the shelf yet'),
-      h(
-        'p',
-        { class: 'state-hint' },
-        'Copies for sale and wanted ads for this pressing will run here, cheapest first.',
-      ),
-    ),
-  );
-}
-
-function releaseView(release) {
+function releaseView(release, market) {
   document.title = documentTitle(release);
   const byline = [
     release.artist,
@@ -145,9 +112,64 @@ function releaseView(release) {
         facts(release),
         tracks(release),
       ),
-      classifieds(),
+      market.classifieds,
     ),
+    market.report,
   );
+}
+
+/**
+ * Keep the market current: load it with your own orders marked, then follow the live
+ * connection. Your own orders are reloaded when the server says one of them changed,
+ * or when you log in or out. Everything stops when you leave the page.
+ */
+function followMarket(release, market, signal) {
+  let latest = null;
+  let mine = new Set();
+  let wasDisconnected = false;
+
+  async function loadMine() {
+    try {
+      const response = await api.market(release.id, signal);
+      if (signal.aborted) return;
+      mine = new Set(response.mine.orderIds);
+      if (isNewerMarket(response.market, latest)) latest = response.market;
+      market.show(latest, mine);
+    } catch (error) {
+      if (isAbortError(error) || signal.aborted || latest) return;
+      market.showError(
+        error instanceof Error ? error.message : 'Could not load the classifieds.',
+        () => void loadMine(),
+      );
+    }
+  }
+
+  const stops = [
+    live.watch(release.id, (next) => {
+      // Two loads can finish out of order; never put an older market over a newer one.
+      if (!isNewerMarket(next, latest)) return;
+      latest = next;
+      market.show(latest, mine);
+    }),
+    live.onStatus((status) => {
+      market.setStatus(status);
+      // Back after a drop (or after logging out in another tab): private messages may have
+      // been missed, so ask again which ads are yours.
+      if (status === 'live' && wasDisconnected) void loadMine();
+      wasDisconnected = status === 'reconnecting';
+    }),
+    live.onPrivate((message) => {
+      if (message.releaseId === release.id) void loadMine();
+    }),
+    session.subscribe(() => {
+      market.showCoupons();
+      void loadMine();
+    }),
+  ];
+  signal.addEventListener('abort', () => stops.forEach((stop) => stop()), { once: true });
+  market.showCoupons();
+  void loadMine();
+  return { reloadMine: () => void loadMine() };
 }
 
 export const releasePage = (ctx) => {
@@ -158,7 +180,17 @@ export const releasePage = (ctx) => {
     replaceChildren(root, loadingState('Pulling the record from the stacks…'));
     try {
       const { release } = await api.release(id, ctx.signal);
-      if (!ctx.signal.aborted) replaceChildren(root, releaseView(release));
+      if (ctx.signal.aborted) return;
+      let following = null;
+      const market = marketSection({
+        release,
+        user: () => session.user,
+        // After you place or cancel an ad: mark your ads again. The market itself
+        // arrives over the live connection like everyone else's.
+        onPosted: () => following?.reloadMine(),
+      });
+      replaceChildren(root, releaseView(release, market));
+      following = followMarket(release, market, ctx.signal);
     } catch (error) {
       if (isAbortError(error) || ctx.signal.aborted) return;
       if (error instanceof ApiError && error.status === 404) {

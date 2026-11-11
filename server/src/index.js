@@ -13,10 +13,13 @@ if (applied.length) console.log(`[db] applied migrations: ${applied.join(', ')}`
 const server = createApp(ctx).listen(config.PORT, () => {
   console.log(`[http] listening on http://localhost:${config.PORT} (${config.NODE_ENV})`);
 });
+// Live updates share the port: browsers upgrade /ws to a WebSocket.
+ctx.live.attach(server);
 
 // Render sends SIGTERM on deploys: finish open requests, then close the pool.
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, () => {
+    ctx.live.close();
     server.close(() => ctx.pool.end().finally(() => process.exit(0)));
     setTimeout(() => process.exit(1), 10_000).unref();
   });

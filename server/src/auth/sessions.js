@@ -11,6 +11,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 
 /**
+ * A name for a session that is safe to keep in memory and pass around (the live hub uses
+ * it to find a session's connections): the same hash the database stores, never the token.
+ */
+export const sessionIdFor = (token) => hashToken(token);
+
+/**
  * @param {import('pg').Pool | import('pg').PoolClient} db
  * @param {number} userId
  * @returns {Promise<{ token: string, expiresAt: Date }>}
@@ -40,6 +46,19 @@ export async function findSessionUser(db, token, now = new Date()) {
   return rows[0]
     ? { id: Number(rows[0].id), email: rows[0].email, displayName: rows[0].display_name }
     : null;
+}
+
+/**
+ * Who a raw Cookie header belongs to, for connections that don't go through Express
+ * (the live WebSocket). Returns the user and a session id that logout can match.
+ * @param {import('pg').Pool} db
+ */
+export function sessionFromCookie(db) {
+  return async (cookieHeader) => {
+    const token = readCookie(cookieHeader, SESSION_COOKIE);
+    const user = await findSessionUser(db, token);
+    return user ? { userId: user.id, sessionId: sessionIdFor(token) } : null;
+  };
 }
 
 export async function deleteSession(db, token) {

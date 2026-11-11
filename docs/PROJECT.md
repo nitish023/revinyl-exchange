@@ -80,9 +80,10 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/orders?status=open\|filled\|cancelled&releaseId=`                                               | user   | 3    |
 | POST   | `/api/orders` `{ side: 'bid', releaseId, price, minGrade, note }` or `{ side: 'ask', copyId, price }` | user   | 3    |
 | DELETE | `/api/orders/:id`                                                                                     | user   | 3    |
+| GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)                                           | anyone | 4    |
+| WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                             | anyone | 4    |
 
-Planned: `GET /api/releases/:id/market` and the WebSocket (Part 4), buy and sell-to routes and trade states (Part 5),
-collection import (Part 6).
+Planned: buy and sell-to routes and trade states (Part 5), collection import (Part 6).
 
 ## Build plan
 
@@ -93,7 +94,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | 7    | 1   | Sauransh | Matching engine: order book per pressing, grade filter, priority rules, order rules      | ✅ done |
 | 7    | 2   | Nitish   | Repo setup, login and sign up, Discogs catalog, newspaper design and page shell, Neon    | ✅ done |
 | 8    | 3   | Sauransh | Crate, listings and wanted ads, held cash ($2,000 start, seller notes, cancel)           | ✅ done |
-| 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ☐       |
+| 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ✅ done |
 | 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ☐       |
 | 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ☐       |
 | 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ☐       |

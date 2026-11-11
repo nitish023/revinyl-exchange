@@ -1001,6 +1001,182 @@ img {
   margin-top: 8px;
 }
 
+/* The classifieds: two newspaper columns of ads, one section per grade. */
+.live-status {
+  min-height: 1.5em;
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.live-status[data-status='live']::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--ink);
+  vertical-align: 1px;
+}
+.live-status[data-status='reconnecting'] {
+  color: var(--spot-red);
+}
+.classifieds {
+  margin-top: 20px;
+  column-count: 2;
+  column-gap: 48px;
+  column-rule: 1px solid var(--rule);
+}
+.ad-section {
+  break-inside: avoid;
+  break-after: avoid;
+  margin-bottom: 18px;
+}
+.ad-section h3 {
+  padding: 6px 0;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.ad-section-code {
+  margin-right: 4px;
+}
+.ad-section p {
+  margin-top: 6px;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 14px;
+}
+.ad {
+  break-inside: avoid;
+  margin-bottom: 22px;
+  padding-bottom: 20px;
+  border-bottom: 1px dotted var(--rule-dotted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.ad-lead {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.ad-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 10px;
+}
+.ad-price {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 24px;
+  font-variant-numeric: lining-nums;
+}
+.ad-tag {
+  padding: 1px 6px;
+  border: 1px solid var(--ink);
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+/* A fresh ad arrives like wet ink and dries over a few seconds. */
+.ad.is-new {
+  animation: fresh-ink 3s ease-out;
+}
+@keyframes fresh-ink {
+  from {
+    background: rgba(30, 28, 25, 0.12);
+  }
+  to {
+    background: transparent;
+  }
+}
+.market-coupons:not(:empty) {
+  margin-top: 28px;
+}
+
+/* The Market Report: last sale per grade in big type, then recent sales. */
+.market-report {
+  margin-top: var(--space-section);
+}
+.report-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.2fr);
+  gap: 32px;
+}
+.report-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+.report-figure {
+  padding: 24px 32px 8px 0;
+  margin-right: 32px;
+  border-right: 1px solid var(--rule);
+}
+.report-numbers {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 4px;
+}
+.report-price {
+  font-family: var(--font-gothic);
+  font-size: 64px;
+  line-height: 1;
+}
+.report-change,
+.report-range {
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+.report-change {
+  font-weight: 700;
+}
+.report-none {
+  padding-top: 24px;
+  font-family: var(--font-head);
+  font-style: italic;
+}
+.report-sales {
+  padding-top: 24px;
+}
+.sales-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-label);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.sales-table td {
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--rule-dotted);
+}
+.sales-table td:nth-child(2) {
+  text-align: center;
+}
+.sales-table td:last-child {
+  text-align: right;
+}
+.report-summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin-top: 18px;
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+.report-summary dt {
+  font-weight: 700;
+}
+
 /* ---------- Log in and sign up ---------- */
 
 .auth-page {
@@ -1156,6 +1332,21 @@ img {
   }
   .market-guide .grade-scale {
     width: 100%;
+  }
+  .classifieds {
+    column-count: 1;
+  }
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
+  .report-figure {
+    margin-right: 0;
+    padding-right: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .report-price {
+    font-size: 52px;
   }
   .auth-page {
     padding-top: 32px;
@@ -1383,7 +1574,8 @@ select.input {
   .halftone::after {
     transition: none;
   }
-  .spinner {
+  .spinner,
+  .ad.is-new {
     animation: none;
   }
 }
