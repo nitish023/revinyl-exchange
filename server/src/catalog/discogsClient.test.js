@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import releaseFixture from './fixtures/release-249504.json' with { type: 'json' };
+import collectionFixture from './fixtures/collection-page.json' with { type: 'json' };
+import fieldsFixture from './fixtures/collection-fields.json' with { type: 'json' };
 import searchFixture from './fixtures/search-astley.json' with { type: 'json' };
 import { DiscogsClient, DiscogsUnavailableError } from './discogsClient.js';
 import { RateWindow } from './rateWindow.js';
@@ -97,5 +99,51 @@ describe('DiscogsClient', () => {
     await expect(offline.getRelease(249504)).rejects.toBeInstanceOf(DiscogsUnavailableError);
     const broken = client(vi.fn().mockResolvedValue(new Response('oops', { status: 500 })));
     await expect(broken.getRelease(249504)).rejects.toMatchObject({ reason: 'down' });
+  });
+});
+
+describe('DiscogsClient collections', () => {
+  const fields = { media: 1, sleeve: 2 };
+
+  it('reads one page of folder 0, newest first, 100 at a time', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(collectionFixture));
+    const page = await client(fetchMock).getCollectionPage('digger', 2, fields);
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(url.pathname).toBe('/users/digger/collection/folders/0/releases');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      page: '2',
+      per_page: '100',
+      sort: 'added',
+      sort_order: 'desc',
+    });
+    expect(page.items).toHaveLength(5);
+  });
+
+  it('finds the condition fields', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(fieldsFixture));
+    expect(await client(fetchMock).getConditionFields('digger')).toEqual({ media: 1, sleeve: 2 });
+  });
+
+  it('returns null for a user Discogs doesn’t have, and says when a collection is private', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: 'User does not exist.' }, 404))
+      .mockResolvedValueOnce(jsonResponse({ message: 'You must authenticate.' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ message: 'Forbidden.' }, 403));
+    const discogs = client(fetchMock);
+    expect(await discogs.getConditionFields('nobody')).toBeNull();
+    for (let i = 0; i < 2; i += 1) {
+      await expect(discogs.getCollectionPage('shy', 1, fields)).rejects.toMatchObject({
+        reason: 'private',
+      });
+    }
+  });
+
+  it('keeps a username in its own path segment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(fieldsFixture));
+    await client(fetchMock).getConditionFields('a/../b');
+    expect(new URL(fetchMock.mock.calls[0][0]).pathname).toBe(
+      '/users/a%2F..%2Fb/collection/fields',
+    );
   });
 });

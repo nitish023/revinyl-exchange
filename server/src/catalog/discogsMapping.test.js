@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import releaseFixture from './fixtures/release-249504.json' with { type: 'json' };
+import collectionFixture from './fixtures/collection-page.json' with { type: 'json' };
+import fieldsFixture from './fixtures/collection-fields.json' with { type: 'json' };
 import searchFixture from './fixtures/search-astley.json' with { type: 'json' };
 import {
+  conditionFieldIds,
+  mapCollectionPage,
   cleanArtistName,
   imageUrl,
   isVinyl,
@@ -142,5 +146,64 @@ describe('helpers', () => {
 
   it('keeps everything as the title when there is no artist separator', () => {
     expect(splitSearchTitle('Untitled')).toEqual({ artist: 'Unknown artist', title: 'Untitled' });
+  });
+});
+
+describe('collections (docs-shaped fixtures)', () => {
+  const fieldIds = conditionFieldIds(fieldsFixture);
+  const page = mapCollectionPage(collectionFixture, fieldIds);
+  const byInstance = (id) => page.items.find((item) => item.instanceId === id);
+
+  it('finds the media and sleeve fields by name, whatever their ids', () => {
+    expect(fieldIds).toEqual({ media: 1, sleeve: 2 });
+    const renamed = {
+      fields: [
+        { id: 7, name: 'Sleeve', type: 'dropdown' },
+        { id: 9, name: 'Media', type: 'dropdown' },
+      ],
+    };
+    expect(conditionFieldIds(renamed)).toEqual({ media: 9, sleeve: 7 });
+    expect(conditionFieldIds({ fields: [{ id: 3, name: 'Notes', type: 'textarea' }] })).toEqual({
+      media: null,
+      sleeve: null,
+    });
+    expect(conditionFieldIds(null)).toEqual({ media: null, sleeve: null });
+  });
+
+  it('reads the release and the grades from each item', () => {
+    expect(byInstance(900001)).toMatchObject({
+      grade: 6,
+      sleeveGrade: 5,
+      release: {
+        id: 249504,
+        title: 'Never Gonna Give You Up',
+        artist: 'Rick Astley',
+        label: 'RCA',
+        catno: 'PB 41447',
+        formats: ['Vinyl', '7"', '45 RPM', 'Single'],
+        thumbUrl: 'https://i.discogs.com/fixture/R-249504-thumb.jpg',
+        discogsUrl: 'https://www.discogs.com/release/249504',
+        tracklist: [],
+      },
+    });
+    expect(byInstance(900002).release.artist).toBe('Pell & Ruiz');
+  });
+
+  it('tells a generic sleeve from an ungraded one', () => {
+    expect(byInstance(900002)).toMatchObject({ grade: 7, sleeveGrade: 'generic' });
+    expect(byInstance(900003)).toMatchObject({ grade: null, sleeveGrade: null });
+    expect(byInstance(900005)).toMatchObject({ grade: null, sleeveGrade: null });
+  });
+
+  it('ignores grades when the collection has no condition fields we can see', () => {
+    const blind = mapCollectionPage(collectionFixture, { media: null, sleeve: null });
+    expect(blind.items.every((item) => item.grade === null && item.sleeveGrade === null)).toBe(
+      true,
+    );
+  });
+
+  it('keeps the same release twice when someone owns two copies', () => {
+    expect(page.items.filter((item) => item.release.id === 1000001)).toHaveLength(2);
+    expect(page).toMatchObject({ page: 1, pages: 1, total: 5 });
   });
 });
