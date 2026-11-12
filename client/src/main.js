@@ -15,10 +15,11 @@ import { masthead, siteFooter } from './components/masthead.js';
 import { h, replaceChildren } from './dom.js';
 import { live } from './lib/live.js';
 import { loginPage, registerPage } from './pages/auth.js';
-import { cratePage } from './pages/crate.js';
 import { homePage } from './pages/home.js';
 import { notFoundPage } from './pages/notFound.js';
 import { releasePage } from './pages/release.js';
+import { roomPage } from './pages/room.js';
+import { roomImportPage } from './pages/roomImport.js';
 import { searchPage } from './pages/search.js';
 import { matchRoute, router } from './router.js';
 import { session } from './session.js';
@@ -29,7 +30,13 @@ const PAGES = {
   release: releasePage,
   login: loginPage,
   register: registerPage,
-  crate: cratePage,
+  room: roomPage,
+  roomImport: roomImportPage,
+  // Old links to Your Crate open the Listening Room, which replaced it.
+  crate: (ctx) => {
+    queueMicrotask(() => ctx.navigate('/room', { replace: true }));
+    return h('main', { class: 'page' });
+  },
   notFound: notFoundPage,
 };
 

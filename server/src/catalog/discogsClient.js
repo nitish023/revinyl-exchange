@@ -8,7 +8,12 @@
  */
 
 import { SEARCH_PAGE_SIZE } from '../../../shared/index.js';
-import { mapRelease, mapSearchResponse } from './discogsMapping.js';
+import {
+  conditionFieldIds,
+  mapCollectionPage,
+  mapRelease,
+  mapSearchResponse,
+} from './discogsMapping.js';
 import { RateLimitWaitTooLong } from './rateWindow.js';
 
 const DEFAULT_BASE_URL = 'https://api.discogs.com';
@@ -37,7 +42,15 @@ export class DiscogsUnavailableError extends Error {
  * @property {(query: string, page: number, filters?: import('../../../shared/catalog.js').SearchFilters) => Promise<import('../../../shared/catalog.js').SearchResults>} searchVinyl
  * @property {(id: number) => Promise<Omit<import('../../../shared/catalog.js').Release, 'fetchedAt'> | null>} getRelease
  *   null when Discogs has no release with that ID
+ * @property {(username: string) => Promise<{ media: number | null, sleeve: number | null } | null>} getConditionFields
+ *   which collection fields hold the media and sleeve grades; null when there's no such user
+ * @property {(username: string, page: number, fieldIds: { media: number | null, sleeve: number | null }) =>
+ *   Promise<ReturnType<typeof mapCollectionPage> | null>} getCollectionPage
+ *   one page (up to 100 items, newest first) of the user's public collection; null for no such user
  */
+
+/** Items per collection page: the most Discogs allows. */
+export const COLLECTION_PAGE_SIZE = 100;
 
 export class DiscogsClient {
   token;
@@ -93,6 +106,29 @@ export class DiscogsClient {
     return body === null ? null : mapRelease(body);
   }
 
+  /**
+   * Which note fields hold the condition grades. Only public fields are visible to us,
+   * since we aren't logged in as the collection's owner.
+   */
+  async getConditionFields(username) {
+    const body = await this.getJson(`/users/${encodeURIComponent(username)}/collection/fields`);
+    return body === null ? null : conditionFieldIds(body);
+  }
+
+  /** One page of folder 0 ("All"), the only folder Discogs shows to people other than the owner. */
+  async getCollectionPage(username, page, fieldIds) {
+    const body = await this.getJson(
+      `/users/${encodeURIComponent(username)}/collection/folders/0/releases`,
+      {
+        page: String(page),
+        per_page: String(COLLECTION_PAGE_SIZE),
+        sort: 'added',
+        sort_order: 'desc',
+      },
+    );
+    return body === null ? null : mapCollectionPage(body, fieldIds);
+  }
+
   /** GET a Discogs endpoint. Returns null on 404; throws DiscogsUnavailableError otherwise. */
   async getJson(path, params = {}) {
     if (this.now() < this.pausedUntil) {
@@ -126,6 +162,10 @@ export class DiscogsClient {
     }
 
     if (response.status === 404) return null;
+    // A private collection: only its owner may read it.
+    if (response.status === 401 || response.status === 403) {
+      throw new DiscogsUnavailableError('private', `Discogs answered ${response.status}`);
+    }
     if (response.status === 429) {
       this.pausedUntil = this.now() + PAUSE_AFTER_429_MS;
       throw new DiscogsUnavailableError('busy', 'Discogs rate limit reached');

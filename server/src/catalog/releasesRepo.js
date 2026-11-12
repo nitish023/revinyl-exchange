@@ -64,3 +64,37 @@ export async function upsertRelease(db, release, fetchedAt) {
   );
   return toReleaseDto(rows[0]);
 }
+
+/**
+ * Cache a pressing from what a Discogs collection says about it, unless we already have
+ * it. A collection item has no tracklist, so the row is stored as already stale
+ * (fetched_at in 1970): the first time someone opens its page, CatalogService fetches the
+ * full release from Discogs (or shows this much if Discogs is unavailable).
+ * @returns {Promise<boolean>} true if it was added
+ */
+export async function insertReleaseIfMissing(db, release) {
+  const { rowCount } = await db.query(
+    `INSERT INTO releases (id, title, artist, year, released, country, label, catno, formats,
+                           genres, styles, tracklist, cover_url, thumb_url, discogs_url, fetched_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'epoch')
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      release.id,
+      release.title,
+      release.artist,
+      release.year,
+      release.released,
+      release.country,
+      release.label,
+      release.catno,
+      release.formats,
+      release.genres,
+      release.styles,
+      JSON.stringify(release.tracklist),
+      release.coverUrl,
+      release.thumbUrl,
+      release.discogsUrl,
+    ],
+  );
+  return rowCount === 1;
+}

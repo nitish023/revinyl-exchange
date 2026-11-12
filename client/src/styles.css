@@ -1454,8 +1454,7 @@ select.input {
 .your-ads {
   margin-top: 40px;
 }
-.your-ads ul,
-.crate-list {
+.your-ads ul {
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
@@ -1474,70 +1473,227 @@ select.input {
   font-weight: 700;
 }
 
-.wallet-strip {
+/* ---------- The Listening Room ---------- */
+
+.room-head .headline {
+  max-width: 22ch;
+}
+.room-top {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  padding: 24px 0;
-  border-top: 3px solid var(--ink);
-  border-bottom: 1px solid var(--ink);
-  text-align: center;
-}
-.wallet-amount {
-  margin: 4px 0 0;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 36px;
-  line-height: 1.1;
-}
-.crate-section {
-  margin-top: 64px;
-}
-.crate-item {
-  display: grid;
-  grid-template-columns: 96px 1fr auto;
-  gap: 24px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 48px;
   align-items: start;
-  padding: 24px 0;
-  border-bottom: 1px dotted var(--rule-dotted);
+  padding-bottom: 48px;
+  border-bottom: 1px solid var(--ink);
 }
-.crate-item--ad {
-  grid-template-columns: 1fr auto;
+.room-top > :only-child {
+  grid-column: 1 / -1;
+  max-width: 62ch;
 }
-.crate-title {
+.room-lead {
+  font-size: 19px;
+  line-height: 1.7;
+  text-align: justify;
+  hyphens: auto;
+}
+/* A drop cap, like the first paragraph of a story. */
+.drop-cap::first-letter {
+  float: left;
+  padding: 6px 8px 0 0;
+  font-family: var(--font-gothic);
+  font-size: 76px;
+  line-height: 0.8;
+}
+.room-counter {
+  padding: 18px 20px;
+  border: 1px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.room-counter-text {
+  margin: 8px 0 12px;
   font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 22px;
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.5;
+}
+.room-shelf {
+  margin-top: var(--space-section);
+}
+.room-shelf .section-head .link-arrow {
   color: inherit;
 }
-.crate-text p {
-  margin: 4px 0 0;
+.shelf-grid {
+  margin-top: 32px;
 }
-.crate-notes {
-  font-style: italic;
-}
-.crate-actions {
+.shelf-item {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  text-align: right;
+  gap: 8px;
 }
-.photo-strip {
+.record-status--moving {
+  font-weight: 800;
+}
+.room-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 64px;
+  margin-top: var(--space-section);
+}
+.section-head--small h2 {
+  font-size: 36px;
+}
+.room-none {
+  margin-top: 18px;
+  font-family: var(--font-head);
+  font-style: italic;
+}
+.room-ad {
+  padding: 18px 0;
+  border-bottom: 1px dotted var(--rule-dotted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.room-ad a {
+  color: inherit;
+}
+.room-ad-foot {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin-top: 8px;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 14px;
+}
+.action-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.action-button .button {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 11px;
+}
+.ledger-table {
+  width: 100%;
   margin-top: 12px;
+  border-collapse: collapse;
+  font-family: var(--font-label);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
-.photo-strip img {
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
-  border: 1px solid var(--ink);
-  filter: grayscale(1);
+.ledger-table th {
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: left;
+  text-transform: uppercase;
 }
-.photo-strip img:hover {
-  filter: none;
+.ledger-table td {
+  padding: 8px 8px 8px 0;
+  border-bottom: 1px dotted var(--rule-dotted);
+  vertical-align: top;
+}
+.ledger-table td a {
+  color: inherit;
+  font-weight: 700;
+}
+.ledger-side {
+  display: block;
+  font-size: 12px;
+  font-style: italic;
+}
+.ledger-amount {
+  white-space: nowrap;
+}
+.ledger-open td {
+  font-weight: 700;
+}
+
+/* ---------- Bring in your Discogs collection ---------- */
+
+.import-lookup {
+  max-width: 560px;
+  margin: 0 auto;
+}
+.import-lookup .button {
+  margin-top: 20px;
+}
+.import-results {
+  margin-top: 64px;
+}
+.import-summary {
+  margin-top: 14px;
+  font-family: var(--font-head);
+  font-style: italic;
+}
+.import-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 16px;
+}
+.import-count {
+  font-family: var(--font-label);
+  font-size: 13px;
+  font-weight: 700;
+}
+.import-list {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.import-row {
+  display: grid;
+  grid-template-columns: 32px 72px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px dotted var(--rule-dotted);
+}
+.import-row--done {
+  opacity: 0.6;
+}
+.import-row .cover {
+  width: 100%;
+}
+.import-tick input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--ink);
+}
+.import-text .record-title {
+  font-size: 18px;
+}
+.import-grades {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 10px;
+  align-items: center;
+}
+.import-grades .field-error {
+  grid-column: 1 / -1;
+}
+.input--compact {
+  min-height: 36px;
+  padding: 4px 8px;
+  font-size: 14px;
+}
+.import-submit {
+  margin-top: 28px;
+}
+.import-done {
+  text-align: center;
+}
+.import-done .button {
+  margin-top: 20px;
 }
 
 /* The masthead's account links stay on one line each, and wrap as a group on phones. */
@@ -1552,17 +1708,16 @@ select.input {
     justify-content: flex-end;
     gap: 4px 14px;
   }
-  .wallet-strip {
+  .room-top,
+  .room-columns {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 40px;
   }
-  .crate-item {
-    grid-template-columns: 64px 1fr;
+  .import-row {
+    grid-template-columns: 28px 56px minmax(0, 1fr);
   }
-  .crate-actions {
-    grid-column: 1 / -1;
-    align-items: flex-start;
-    text-align: left;
+  .import-grades {
+    grid-column: 2 / -1;
   }
 }
 
