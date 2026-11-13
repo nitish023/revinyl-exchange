@@ -98,4 +98,17 @@ export const api = {
   },
   placeOrder: (input) => request('POST', '/orders', { body: input }),
   cancelOrder: (orderId) => request('DELETE', `/orders/${orderId}`),
+  /** "Buy this copy": the server takes the price and grade from the ad. */
+  buy: (askId) => request('POST', `/orders/${askId}/buy`, { body: {} }),
+  /** "Sell to them": one of your copies answers the WANTED ad at its price. */
+  sellTo: (bidId, copyId) => request('POST', `/orders/${bidId}/sell`, { body: { copyId } }),
+
+  /** @param {{ status?: string }} filters */
+  trades: (filters = {}, signal) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
+    return request('GET', `/trades?${params}`, signal ? { signal } : {});
+  },
+  /** @param {'ship' | 'cancel' | 'received' | 'refund'} step */
+  tradeStep: (tradeId, step) => request('POST', `/trades/${tradeId}/${step}`, { body: {} }),
 };
