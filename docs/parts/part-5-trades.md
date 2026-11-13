@@ -86,3 +86,24 @@ npm run db:up && npm run db:seed
 npm run test:all
 git checkout -b sauransh/part-5-trades
 ```
+
+## As built
+
+- **Buy and Sell to them** run in the pressing's queue like any order. The target ad is locked (`FOR UPDATE`) and
+  matched against a book holding only that ad, so a targeted order can't fill against anything else. If the ad is
+  missing from the book, it's the same `BookOutOfStepError` reload-and-retry as Part 3.
+- **Errors:** your own ad is 400 `OWN_AD`; a missing ad, or a WANTED ad sent to `/buy` (and the reverse), is 404; an
+  ad that's gone or already taken is 409 `TARGET_UNAVAILABLE`. Selling: a copy that isn't yours is 404, the wrong
+  pressing 400 `WRONG_PRESSING`, a copy in a trade 409 `COPY_NOT_AVAILABLE`, and a grade below the ad's lowest 400
+  `GRADE_TOO_LOW` (on the `copyId` field).
+- **Selling a listed copy** cancels its FOR SALE ad in the same transaction; the old ad leaves the book after COMMIT,
+  together with the trade. If the sale fails, the ad stays listed.
+- **Migration 006** adds `shipped_at` and `settled_at`. The demo seed writes finished trades directly, so the only
+  rule enforced is that a trade still awaiting shipment has no shipping date; older trades take `updated_at`.
+- **Locks for a step:** the trade, then both people's wallets in id order (one query), then the copy. The copy must
+  still be `in_trade`; anything else is a bug and rolls back.
+- **Live messages:** `trade` (with `status`) to both people after every step, `wallet` to whoever was paid, and
+  `marketChanged` when a trade settles (completed or refunded).
+- **Limits:** trade steps are limited to 30 a minute per visitor; `GET /api/trades` returns the newest 200.
+- **Browser:** `api.buy(askId)`, `api.sellTo(bidId, copyId)`, `api.trades({ status })` and
+  `api.tradeStep(tradeId, step)` in `client/src/lib/api.js`.
