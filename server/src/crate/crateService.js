@@ -98,7 +98,7 @@ export async function listCrate(pool, userId, releaseId) {
 /** Lock one of the user's own copies for the rest of the transaction, or 404. */
 async function lockMyCopy(client, userId, copyId) {
   const { rows } = await client.query(
-    `SELECT id, status FROM copies
+    `SELECT id, status, release_id FROM copies
       WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR UPDATE`,
     [copyId, userId],
   );
@@ -134,12 +134,12 @@ export async function removeCopy(pool, userId, copyId) {
  * Content-Type header only decides whether Express handed us the body at all.
  * @param {Buffer | unknown} bytes
  */
-export async function addPhoto(pool, userId, copyId, bytes) {
+export async function addPhoto(ctx, userId, copyId, bytes) {
   const type = Buffer.isBuffer(bytes) && bytes.length > 0 ? photoTypeFromBytes(bytes) : null;
   if (!type) {
     throw new AppError(415, 'UNSUPPORTED_PHOTO', 'Photos must be JPEG, PNG or WebP images.');
   }
-  return withTransaction(pool, async (client) => {
+  const { photo, copy } = await withTransaction(ctx.pool, async (client) => {
     const copy = await lockMyCopy(client, userId, copyId);
     if (copy.status === 'in_trade') {
       throw new AppError(
@@ -165,18 +165,28 @@ export async function addPhoto(pool, userId, copyId, bytes) {
       'INSERT INTO copy_photos (copy_id, position, content_type, bytes) VALUES ($1, $2, $3, $4)',
       [copyId, position, type, bytes],
     );
-    return { position, url: photoUrl(copyId, position) };
+    return { photo: { position, url: photoUrl(copyId, position) }, copy };
   });
+  // A listed copy's ad shows its photos, so people watching that market should redraw.
+  if (copy.status === 'listed') ctx.live.marketChanged(copy.release_id);
+  return photo;
 }
 
-/** A photo for an ad. Anyone may see it; photos of removed copies are gone. */
-export async function findPhoto(pool, copyId, position) {
+/**
+ * One photo of a copy, if `viewerId` may see it: anyone for a listed or traded copy, only the
+ * owner otherwise. Photos of removed copies are gone.
+ */
+export async function findPhoto(pool, copyId, position, viewerId) {
   const { rows } = await pool.query(
-    `SELECT p.content_type, p.bytes
+    `SELECT p.content_type, p.bytes, c.status, c.owner_id
        FROM copy_photos p JOIN copies c ON c.id = p.copy_id
       WHERE p.copy_id = $1 AND p.position = $2 AND c.removed_at IS NULL`,
     [copyId, position],
   );
-  if (rows.length === 0) throw notFound('Photo');
-  return { contentType: rows[0].content_type, bytes: rows[0].bytes };
+  const row = rows[0];
+  // Anyone may see the photos on an ad (listed) or of a record being traded; a copy sitting
+  // in someone's crate is only theirs to look at. Hidden ones are "not found", like missing ones.
+  const shown = row && (row.status === 'listed' || row.status === 'in_trade');
+  if (!row || (!shown && row.owner_id !== viewerId)) throw notFound('Photo');
+  return { contentType: row.content_type, bytes: row.bytes, isPublic: shown };
 }

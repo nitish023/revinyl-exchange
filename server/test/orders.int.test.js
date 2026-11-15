@@ -214,7 +214,7 @@ describe('crate', () => {
     const first = await alice.upload(path, PNG, 'image/png').expect(201);
     // The claimed type is ignored: the bytes say JPEG, so it is stored as JPEG.
     await alice.upload(path, JPEG, 'image/png').expect(201);
-    const served = await request(app).get(first.body.photo.url).expect(200);
+    const served = await alice.get(first.body.photo.url).expect(200);
 
     expect(first.body.photo).toEqual({
       position: 1,
@@ -222,7 +222,7 @@ describe('crate', () => {
     });
     expect(served.headers['content-type']).toBe('image/png');
     expect(Buffer.compare(served.body, PNG)).toBe(0);
-    const second = await request(app).get(`/api/copies/${copy.id}/photos/2`).expect(200);
+    const second = await alice.get(`/api/copies/${copy.id}/photos/2`).expect(200);
     expect(second.headers['content-type']).toBe('image/jpeg');
     const listed = (await alice.get('/api/crate').expect(200)).body.copies[0];
     expect(listed.photos.map((photo) => photo.position)).toEqual([1, 2]);
@@ -236,7 +236,7 @@ describe('crate', () => {
     await request(app).post(path).set('Content-Type', 'image/png').send(PNG).expect(401);
 
     const webp = await alice.upload(path, WEBP, 'image/webp').expect(201);
-    expect((await request(app).get(webp.body.photo.url).expect(200)).headers['content-type']).toBe(
+    expect((await alice.get(webp.body.photo.url).expect(200)).headers['content-type']).toBe(
       'image/webp',
     );
     for (let position = 4; position <= 6; position += 1) {
@@ -246,6 +246,47 @@ describe('crate', () => {
     expect(seventh.body.error.code).toBe('PHOTO_LIMIT');
     await request(app).get(`/api/copies/${copy.id}/photos/7`).expect(400);
     await request(app).get(`/api/copies/999/photos/1`).expect(404);
+  });
+
+  it('shows a copy’s photos to everyone only while it’s listed or in a trade', async () => {
+    const alice = await signUp('alice');
+    const bob = await signUp('bob');
+    const copy = await addCopy(alice);
+    const { url } = (await alice.upload(`/api/crate/${copy.id}/photos`, PNG, 'image/png')).body
+      .photo;
+
+    // In the crate: the owner only, and never kept in a shared cache.
+    const own = await alice.get(url).expect(200);
+    expect(own.headers['cache-control']).toBe('private, no-cache');
+    await bob.get(url).expect(404);
+    await request(app).get(url).expect(404);
+
+    // On an ad: anyone.
+    await alice.post('/api/orders', { side: 'ask', copyId: copy.id, price: '30' }).expect(201);
+    const shown = await request(app).get(url).expect(200);
+    expect(shown.headers['cache-control']).toBe('public, max-age=3600');
+
+    // In a trade, then back in the buyer's crate once it completes.
+    await placeBid(bob, '30').expect(201);
+    await request(app).get(url).expect(200);
+    const [trade] = await query('SELECT id FROM trades');
+    await alice.post(`/api/trades/${trade.id}/ship`, {}).expect(200);
+    await bob.post(`/api/trades/${trade.id}/received`, {}).expect(200);
+    await bob.get(url).expect(200);
+    await alice.get(url).expect(404);
+    await request(app).get(url).expect(404);
+  });
+
+  it('tells the market when a listed copy gets a new photo, not when one in the crate does', async () => {
+    const alice = await signUp('alice');
+    const crated = await addCopy(alice);
+    const { copy: listed } = await listCopy(alice, '30');
+    ctx.live.markets.length = 0;
+
+    await alice.upload(`/api/crate/${crated.id}/photos`, PNG, 'image/png').expect(201);
+    expect(ctx.live.markets).toEqual([]);
+    await alice.upload(`/api/crate/${listed.id}/photos`, PNG, 'image/png').expect(201);
+    expect(ctx.live.markets).toEqual([RELEASE]);
   });
 
   it('stops serving the photos of a removed copy', async () => {

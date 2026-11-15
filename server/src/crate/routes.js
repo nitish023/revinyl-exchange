@@ -15,7 +15,7 @@ import { addCopy, addPhoto, findPhoto, listCrate, removeCopy } from './crateServ
  * POST   /api/crate                            add a copy -> 201 { copy }
  * DELETE /api/crate/:id                        remove a copy that's in the crate -> 204
  * POST   /api/crate/:id/photos                 the image itself as the body -> 201 { photo }
- * GET    /api/copies/:id/photos/:position      the image (anyone: photos are shown on ads)
+ * GET    /api/copies/:id/photos/:position      the image (anyone for a listed or traded copy, else the owner)
  */
 export function crateRouter(ctx, { rateLimit }) {
   const router = Router();
@@ -42,14 +42,15 @@ export function crateRouter(ctx, { rateLimit }) {
 
   router.post('/crate/:id/photos', requireUser, writes, photoBody, async (req, res) => {
     const { id } = idParamSchema.parse(req.params);
-    res.status(201).json({ photo: await addPhoto(ctx.pool, req.user.id, id, req.body) });
+    res.status(201).json({ photo: await addPhoto(ctx, req.user.id, id, req.body) });
   });
 
   router.get('/copies/:id/photos/:position', async (req, res) => {
     const { id, position } = photoParamSchema.parse(req.params);
-    const photo = await findPhoto(ctx.pool, id, position);
+    const photo = await findPhoto(ctx.pool, id, position, req.user?.id);
     res.set('Content-Type', photo.contentType);
-    res.set('Cache-Control', 'public, max-age=3600');
+    // Only an ad's photos may sit in shared caches; an unlisted copy's are for its owner.
+    res.set('Cache-Control', photo.isPublic ? 'public, max-age=3600' : 'private, no-cache');
     res.send(photo.bytes);
   });
 
