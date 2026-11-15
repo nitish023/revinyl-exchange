@@ -20,7 +20,8 @@ const SEARCH_CACHE_TTL_MS = 10 * 60_000;
 const SEARCH_CACHE_MAX_ENTRIES = 200;
 
 function unavailable(error) {
-  if (error.reason === 'not_configured') {
+  // 'unauthorized': Discogs rejected our token, which is a setup problem like a missing one.
+  if (error.reason === 'not_configured' || error.reason === 'unauthorized') {
     return new AppError(
       503,
       'CATALOG_NOT_CONFIGURED',

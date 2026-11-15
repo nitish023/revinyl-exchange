@@ -111,4 +111,13 @@ export const api = {
   },
   /** @param {'ship' | 'cancel' | 'received' | 'refund'} step */
   tradeStep: (tradeId, step) => request('POST', `/trades/${tradeId}/${step}`, { body: {} }),
+
+  room: (signal) => request('GET', '/room', signal ? { signal } : {}),
+  collectionPreview: (username, signal) =>
+    request(
+      'GET',
+      `/collection/discogs?${new URLSearchParams({ username })}`,
+      signal ? { signal } : {},
+    ),
+  importCollection: (input) => request('POST', '/collection/discogs', { body: input }),
 };

@@ -5,6 +5,7 @@
 import { CatalogService } from './catalog/catalogService.js';
 import { DiscogsClient } from './catalog/discogsClient.js';
 import { RateWindow } from './catalog/rateWindow.js';
+import { CollectionImport } from './collection/importService.js';
 import { createPool } from './db/pool.js';
 import { sessionFromCookie } from './auth/sessions.js';
 import { MarketHub } from './market/hub.js';
@@ -21,6 +22,7 @@ import { TradeService } from './trades/tradeService.js';
  *   the WebSocket hub; index.js attaches it to the HTTP server.
  * @property {OrderService} orders places and cancels orders, and keeps each pressing's book
  * @property {TradeService} trades ships, completes and refunds trades
+ * @property {CollectionImport} collection previews and imports Discogs collections
  */
 
 /** @param {import('./config.js').Config} config @returns {AppContext} */
@@ -54,5 +56,6 @@ export function createContext(config) {
     live,
     orders: new OrderService({ pool, catalog, live }),
     trades: new TradeService({ pool, live }),
+    collection: new CollectionImport({ pool, source: discogs }),
   };
 }

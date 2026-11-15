@@ -10,6 +10,9 @@ const ROUTES = [
   { name: 'release', pattern: /^\/release\/(\d{1,15})\/?$/, keys: ['id'] },
   { name: 'login', pattern: /^\/login\/?$/ },
   { name: 'register', pattern: /^\/register\/?$/ },
+  { name: 'room', pattern: /^\/room\/?$/ },
+  { name: 'roomImport', pattern: /^\/room\/import\/?$/ },
+  // The old Your Crate page lives on in the Listening Room.
   { name: 'crate', pattern: /^\/crate\/?$/ },
 ];
 

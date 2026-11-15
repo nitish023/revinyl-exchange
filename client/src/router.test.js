@@ -11,6 +11,8 @@ describe('matchRoute', () => {
     expect(matchRoute('/register').name).toBe('register');
     expect(matchRoute('/crate').name).toBe('crate');
     expect(matchRoute('/crate/').name).toBe('crate');
+    expect(matchRoute('/room').name).toBe('room');
+    expect(matchRoute('/room/import/').name).toBe('roomImport');
   });
 
   it('sends anything else to the 404 page', () => {

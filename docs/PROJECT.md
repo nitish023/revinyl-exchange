@@ -19,6 +19,9 @@ Read this before you start a part. If a rule needs to change, change it here in 
   leave out `removed_at IS NOT NULL` copies anywhere you list a user's records.
 - **Orders go through `ctx.orders`** (`server/src/orders/orderService.js`): never write `orders`, held cash or a
   copy's status from anywhere else, or the in-memory book stops matching the database.
+- **Imported copies:** `copies.discogs_instance_id` ties an imported copy to its owner's Discogs collection, and only
+  one active copy per owner may have each instance id (migration 005). Whenever a copy changes owner (a trade
+  completes, Part 5), set `discogs_instance_id` to NULL in the same update: it belonged to the old owner's collection.
 - **Live updates:** after a commit that changes a pressing's market, call `ctx.live.marketChanged(releaseId)`, and
   `ctx.live.notifyUser(userId, message)` for private changes. Never before the commit.
 - **Database:** plain SQL with `$1` parameters, never string-built SQL. A schema change is a new numbered file in
@@ -42,7 +45,13 @@ Read this before you start a part. If a rule needs to change, change it here in 
 2. Pressings are cached in `releases` and refreshed after `CATALOG_MAX_AGE_HOURS`. Anything that refers to a pressing
    (copies, orders, trades) calls `ctx.catalog.ensureRelease(id)` first and uses `releases(id)` as its foreign key.
 3. Vinyl only. Never store or show Discogs marketplace prices: our prices come only from our own trades.
-4. Pages that show Discogs data credit it with a link and say we're not affiliated (the footer does this on every
+4. **Collection import** (Part 6) reads public collections only (we can't log in as their owner). A look-up costs
+   up to 6 requests, so what Discogs sends is reused for 10 minutes per username, and each account gets 2 look-ups a
+   minute. A look-up lists the next 100 vinyl records you haven't imported yet. Imported pressings are cached from
+   the collection's basic information with `fetched_at` in 1970, so their page fetches the full release the first
+   time it's opened. We can't verify that a Discogs account belongs to the person importing it without Discogs OAuth;
+   with play money that's accepted.
+5. Pages that show Discogs data credit it with a link and say we're not affiliated (the footer does this on every
    page). Covers load from `https://i.discogs.com` only (allowed in the CSP in `server/src/app.js`).
 
 ## Design: "The Paper"
@@ -81,10 +90,12 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | POST   | `/api/orders` `{ side: 'bid', releaseId, price, minGrade, note }` or `{ side: 'ask', copyId, price }` | user   | 3    |
 | DELETE | `/api/orders/:id`                                                                                     | user   | 3    |
 | GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)                                           | anyone | 4    |
+| GET    | `/api/room` (your Listening Room: wallet, shelf, wanted ads, ledger, counter, value)                  | user   | 6    |
+| GET    | `/api/collection/discogs?username=` (preview a public Discogs collection)                             | user   | 6    |
+| POST   | `/api/collection/discogs` `{ username, items: [{ instanceId, grade, sleeveGrade }] }`                 | user   | 6    |
 | WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                             | anyone | 4    |
 
-Planned: buy and sell-to routes and trade states (Part 5, see `docs/parts/part-5-trades.md`), the Discogs collection
-import and the Listening Room (Part 6).
+Planned: buy and sell-to routes and trade states (Part 5, see `docs/parts/part-5-trades.md`).
 
 ## Build plan
 
@@ -97,7 +108,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | 8    | 3   | Sauransh | Crate, listings and wanted ads, held cash ($2,000 start, seller notes, cancel)           | ✅ done |
 | 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ✅ done |
 | 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ☐       |
-| 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ☐       |
+| 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ✅ done |
 | 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ☐       |
 | 10   | 8   | Nitish   | Demo bots, the front page (lead record, First Shelf) and the reVINYL 30 chart            | ☐       |
 | 11   | 9   | Sauransh | Security pass and accessibility pass (stretch: mutation testing)                         | ☐       |
