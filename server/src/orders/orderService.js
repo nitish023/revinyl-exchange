@@ -10,6 +10,10 @@
  * Orders for the same pressing run one at a time (a queue per release id), so two people
  * can't both take the same copy. Different pressings run in parallel.
  *
+ * "Buy this copy" and "Sell to them" (Part 5) are targeted orders: they go through the same
+ * queue and the same three steps, but may only match the one ad they name, and never rest.
+ * Everything about them (price, grade, pressing) is read from that ad, never the request.
+ *
  * Locks: a transaction locks at most one wallet (users row) and one copy. A bid locks the
  * buyer's wallet, then the copy it buys; an ask locks its copy, then the buyer's wallet.
  * Those two can only wait on each other for the same copy, which means the same pressing,
@@ -17,7 +21,7 @@
  * person on different pressings take turns on that person's wallet, so the same dollars
  * can't back two orders.
  */
-import { formatCents, placeOrderSchema } from '../../../shared/index.js';
+import { formatCents, gradeByRank, placeOrderSchema, sellToSchema } from '../../../shared/index.js';
 import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../errors.js';
 import { OrderBook } from '../market/orderBook.js';
@@ -55,6 +59,9 @@ export class BookOutOfStepError extends Error {
     this.name = 'BookOutOfStepError';
   }
 }
+
+const targetUnavailable = () =>
+  new AppError(409, 'TARGET_UNAVAILABLE', 'Someone else just took that ad, or it was cancelled.');
 
 function insufficientFunds(spendableCents, neededCents) {
   const message = `This ad needs $${formatCents(neededCents)} held, and you have $${formatCents(spendableCents)} to spend.`;
@@ -118,17 +125,37 @@ export class OrderService {
     } else {
       releaseId = await this.#releaseOfMyCopy(user.id, request.copyId);
     }
-    return this.#queue.run(releaseId, async () => {
-      try {
-        return await this.#placeInQueue(user, request, releaseId);
-      } catch (error) {
-        if (!(error instanceof BookOutOfStepError)) throw error;
-        // #transaction dropped the stale book, so this try loads a fresh one. Only once:
-        // a fresh book can't be out of step with the database it was just read from.
-        console.warn(`[orders] ${error.message}; reloaded the book for ${releaseId} and retried`);
-        return this.#placeInQueue(user, request, releaseId);
-      }
-    });
+    return this.#inQueue(releaseId, () => this.#placeInQueue(user, request, releaseId));
+  }
+
+  /**
+   * "Buy this copy": take one FOR SALE ad at its price. The trade is made straight away
+   * (awaiting shipment) and the price comes out of the buyer's cash, or nothing happens.
+   * @param {{ id: number }} user
+   * @param {number} askId the FOR SALE ad
+   * @returns {Promise<{ order: PlacedOrder, trade: object }>}
+   */
+  async buy(user, askId) {
+    const releaseId = await this.#releaseOfTarget(user, askId, 'ask');
+    return this.#inQueue(releaseId, () => this.#takeInQueue(user, askId, releaseId, takeAsk));
+  }
+
+  /**
+   * "Sell to them": answer one WANTED ad with one of your copies, at the ad's price. A copy
+   * that's already for sale has its FOR SALE ad cancelled in the same transaction.
+   * @param {{ id: number }} user
+   * @param {number} bidId the WANTED ad
+   * @param {unknown} input the request body: { copyId }
+   * @returns {Promise<{ order: PlacedOrder, trade: object }>}
+   */
+  async sellTo(user, bidId, input) {
+    const { copyId } = sellToSchema.parse(input ?? {});
+    const releaseId = await this.#releaseOfTarget(user, bidId, 'bid');
+    return this.#inQueue(releaseId, () =>
+      this.#takeInQueue(user, bidId, releaseId, (client, target) =>
+        answerBid(client, user.id, copyId, target),
+      ),
+    );
   }
 
   /**
@@ -157,6 +184,84 @@ export class OrderService {
     return rows[0].release_id;
   }
 
+  /**
+   * Take a turn in the pressing's queue. If the cached book offered a match the database no
+   * longer has, #transaction has dropped it, so one more try loads a fresh one. Only once:
+   * a fresh book can't be out of step with the database it was just read from.
+   */
+  #inQueue(releaseId, work) {
+    return this.#queue.run(releaseId, async () => {
+      try {
+        return await work();
+      } catch (error) {
+        if (!(error instanceof BookOutOfStepError)) throw error;
+        console.warn(`[orders] ${error.message}; reloaded the book for ${releaseId} and retried`);
+        return work();
+      }
+    });
+  }
+
+  /**
+   * The pressing of the ad a targeted order names, so it can join that pressing's queue.
+   * A missing ad, or one on the wrong side, is a 404; it's checked again under a lock later.
+   */
+  async #releaseOfTarget(user, orderId, side) {
+    const { rows } = await this.pool.query(
+      'SELECT release_id, user_id, side, status FROM orders WHERE id = $1',
+      [orderId],
+    );
+    if (rows.length === 0 || rows[0].side !== side) throw notFound('Ad');
+    if (rows[0].user_id === user.id) throw ownAd();
+    if (rows[0].status !== 'open') throw targetUnavailable();
+    return rows[0].release_id;
+  }
+
+  /**
+   * Buy this copy / Sell to them, inside the pressing's queue: lock the ad, insert the
+   * user's side (`insertOwnSide`), match it against that ad alone, save the trade, and only
+   * after COMMIT change the book and tell people.
+   */
+  async #takeInQueue(user, targetId, releaseId, insertOwnSide) {
+    const book = await this.book(releaseId);
+    const saved = await this.#transaction(releaseId, async (client) => {
+      const target = await lockTarget(client, targetId);
+      if (target.user_id === user.id) throw ownAd();
+      if (target.status !== 'open') throw targetUnavailable();
+      const resting = findInBook(book, targetId);
+      // Open in the database but missing from the book: the book is stale. Roll back, reload.
+      if (!resting) throw new BookOutOfStepError(`Order ${targetId} is open but not in the book`);
+
+      const own = await insertOwnSide(client, target, user.id);
+      const engine = { ...own.engine, targetOrderId: targetId };
+      const result = matchAgainst(resting, engine, releaseId);
+      if (!result.trade) throw targetUnavailable(); // rolls back: nothing is saved
+      const trade = await recordTrade(client, engine, result.trade, releaseId);
+      // Set only now: the database refuses a targeted order that is still open.
+      const { rows } = await client.query(
+        'UPDATE orders SET target_order_id = $2 WHERE id = $1 RETURNING *',
+        [engine.id, targetId],
+      );
+      return { engine, result, row: rows[0], trade, cancelledAskId: own.cancelledAskId ?? null };
+    });
+
+    this.#updateBook(book, (b) => {
+      if (saved.cancelledAskId !== null) b.remove(saved.cancelledAskId);
+      b.apply(saved.engine, saved.result);
+    });
+    this.#announce(releaseId, (live) => {
+      this.#tellAboutOrder(live, user, releaseId, saved);
+      if (saved.cancelledAskId !== null) {
+        live.notifyUser(user.id, {
+          type: 'order',
+          releaseId,
+          orderId: saved.cancelledAskId,
+          status: 'cancelled',
+        });
+      }
+    });
+    return { order: toPlacedOrder(saved.row), trade: toTradeView(saved.trade, user.id) };
+  }
+
   async #placeInQueue(user, request, releaseId) {
     const book = await this.book(releaseId);
     const saved = await this.#transaction(releaseId, async (client) => {
@@ -173,37 +278,45 @@ export class OrderService {
     });
 
     this.#updateBook(book, (b) => b.apply(saved.engine, saved.result));
-    this.#announce(releaseId, (live) => {
-      live.notifyUser(user.id, {
-        type: 'order',
-        releaseId,
-        orderId: saved.row.id,
-        status: saved.row.status,
-      });
-      if (saved.trade) {
-        const { buyer_id: buyerId, seller_id: sellerId } = saved.trade;
-        const restingId =
-          saved.engine.side === 'bid' ? saved.trade.ask_order_id : saved.trade.bid_order_id;
-        const restingOwner = saved.engine.side === 'bid' ? sellerId : buyerId;
-        live.notifyUser(restingOwner, {
-          type: 'order',
-          releaseId,
-          orderId: restingId,
-          status: 'filled',
-        });
-        for (const userId of [buyerId, sellerId]) {
-          live.notifyUser(userId, { type: 'trade', releaseId, tradeId: saved.trade.id });
-        }
-        live.notifyUser(buyerId, { type: 'wallet', releaseId });
-      } else if (saved.engine.side === 'bid') {
-        live.notifyUser(user.id, { type: 'wallet', releaseId });
-      }
-    });
+    this.#announce(releaseId, (live) => this.#tellAboutOrder(live, user, releaseId, saved));
 
     return {
       order: toPlacedOrder(saved.row),
       trade: saved.trade ? toTradeView(saved.trade, user.id) : null,
     };
+  }
+
+  /** The private messages after an order is placed: its owner, and both sides of a trade. */
+  #tellAboutOrder(live, user, releaseId, saved) {
+    live.notifyUser(user.id, {
+      type: 'order',
+      releaseId,
+      orderId: saved.row.id,
+      status: saved.row.status,
+    });
+    if (saved.trade) {
+      const { buyer_id: buyerId, seller_id: sellerId } = saved.trade;
+      const restingId =
+        saved.engine.side === 'bid' ? saved.trade.ask_order_id : saved.trade.bid_order_id;
+      const restingOwner = saved.engine.side === 'bid' ? sellerId : buyerId;
+      live.notifyUser(restingOwner, {
+        type: 'order',
+        releaseId,
+        orderId: restingId,
+        status: 'filled',
+      });
+      for (const userId of [buyerId, sellerId]) {
+        live.notifyUser(userId, {
+          type: 'trade',
+          releaseId,
+          tradeId: saved.trade.id,
+          status: saved.trade.status,
+        });
+      }
+      live.notifyUser(buyerId, { type: 'wallet', releaseId });
+    } else if (saved.engine.side === 'bid') {
+      live.notifyUser(user.id, { type: 'wallet', releaseId });
+    }
   }
 
   async #cancelInQueue(user, orderId, releaseId) {
@@ -317,6 +430,89 @@ async function insertAsk(client, userId, request) {
     [userId, copies[0].release_id, request.price, request.copyId],
   );
   return { engine: toEngineOrder(rows[0], copies[0].grade) };
+}
+
+const ownAd = () => new AppError(400, 'OWN_AD', 'That’s your own ad.');
+
+/** Lock the ad a targeted order names (with an ask's copy grade), or 404. */
+async function lockTarget(client, orderId) {
+  const { rows } = await client.query(
+    `SELECT o.*, c.grade FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
+      WHERE o.id = $1 FOR UPDATE OF o`,
+    [orderId],
+  );
+  if (rows.length === 0) throw notFound('Ad');
+  return rows[0];
+}
+
+/** The resting order with this id, as the book holds it, or undefined. */
+function findInBook(book, orderId) {
+  return [...book.asks(), ...book.bids()].find((order) => order.id === orderId);
+}
+
+/**
+ * Match a targeted order against its one ad, with the engine's own rules (price, grade, no
+ * self-trade). It runs in a scratch book that holds only that ad because the seller's old
+ * FOR SALE ad for the same copy may still be in the real book: the engine would refuse a
+ * second ask for that copy, and the old ad only leaves the real book after COMMIT.
+ */
+function matchAgainst(resting, incoming, releaseId) {
+  const scratch = new OrderBook(releaseId);
+  scratch.add(resting);
+  return scratch.match(incoming);
+}
+
+/** Buy this copy: a bid at the ad's price for exactly the copy's grade. */
+async function takeAsk(client, ask, userId) {
+  return insertBid(client, userId, {
+    releaseId: ask.release_id,
+    price: ask.price_cents,
+    minGrade: ask.grade,
+    note: '',
+  });
+}
+
+/**
+ * Sell to them: an ask for one of the user's copies at the WANTED ad's price. The copy must
+ * be theirs, of this pressing, good enough for the ad, and not in a trade. If it's for sale,
+ * its FOR SALE ad is cancelled first (there can only be one open ask per copy).
+ * @returns {Promise<{ engine: object, cancelledAskId: number | null }>}
+ */
+async function answerBid(client, userId, copyId, bid) {
+  const { rows: copies } = await client.query(
+    `SELECT id, release_id, grade, status FROM copies
+      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR UPDATE`,
+    [copyId, userId],
+  );
+  if (copies.length === 0) throw notFound('Copy');
+  const copy = copies[0];
+  if (copy.release_id !== bid.release_id) {
+    const message = 'That copy is a different pressing from this wanted ad.';
+    throw new AppError(400, 'WRONG_PRESSING', message, { copyId: message });
+  }
+  if (copy.status === 'in_trade') {
+    const message = 'That copy is already in a trade.';
+    throw new AppError(409, 'COPY_NOT_AVAILABLE', message, { copyId: message });
+  }
+  if (copy.grade < bid.min_grade) {
+    const message = `This buyer wants ${gradeByRank(bid.min_grade).code} or better, and that copy is ${gradeByRank(copy.grade).code}.`;
+    throw new AppError(400, 'GRADE_TOO_LOW', message, { copyId: message });
+  }
+  let cancelledAskId = null;
+  if (copy.status === 'listed') {
+    const { rows: cancelled } = await client.query(
+      `UPDATE orders SET status = 'cancelled', closed_at = now()
+        WHERE copy_id = $1 AND side = 'ask' AND status = 'open' RETURNING id`,
+      [copy.id],
+    );
+    cancelledAskId = cancelled[0]?.id ?? null;
+  }
+  const { rows } = await client.query(
+    `INSERT INTO orders (user_id, release_id, side, price_cents, copy_id)
+     VALUES ($1, $2, 'ask', $3, $4) RETURNING *`,
+    [userId, copy.release_id, bid.price_cents, copy.id],
+  );
+  return { engine: toEngineOrder(rows[0], copy.grade), cancelledAskId };
 }
 
 /** No match: hold the bid's price, or list the ask's copy. */

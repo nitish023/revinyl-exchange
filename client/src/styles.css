@@ -1611,6 +1611,34 @@ select.input {
   padding: 0 12px;
   font-size: 11px;
 }
+/* Part 5: the buttons on an ad and on a ledger row. */
+.ad-sell,
+.trade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+}
+.ad-sell {
+  justify-content: flex-end;
+  max-width: 70%;
+}
+.ad-sell-copy {
+  width: auto;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+.trade-actions {
+  margin-top: 6px;
+}
+.ad-login {
+  color: inherit;
+  font-family: var(--font-label);
+  font-size: 13px;
+  font-weight: 700;
+}
 .ledger-table {
   width: 100%;
   margin-top: 12px;

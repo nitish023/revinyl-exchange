@@ -9,6 +9,8 @@ import { listMyOrders, loadWallet } from './orderRows.js';
  * GET    /api/orders?status=&releaseId=    my orders
  * POST   /api/orders                       place a bid or an ask -> 201 { order, trade }
  * DELETE /api/orders/:id                   cancel -> { order }
+ * POST   /api/orders/:id/buy               Buy this copy (a FOR SALE ad) -> 201 { order, trade }
+ * POST   /api/orders/:id/sell { copyId }   Sell to them (a WANTED ad) -> 201 { order, trade }
  */
 export function ordersRouter(ctx, { rateLimit }) {
   const router = Router();
@@ -26,6 +28,17 @@ export function ordersRouter(ctx, { rateLimit }) {
 
   router.post('/orders', requireUser, orderWrites, async (req, res) => {
     res.status(201).json(await ctx.orders.place(req.user, req.body));
+  });
+
+  // Only the ad's id (and, to sell, your copy) is read: price and grade come from the ad.
+  router.post('/orders/:id/buy', requireUser, orderWrites, async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    res.status(201).json(await ctx.orders.buy(req.user, id));
+  });
+
+  router.post('/orders/:id/sell', requireUser, orderWrites, async (req, res) => {
+    const { id } = idParamSchema.parse(req.params);
+    res.status(201).json(await ctx.orders.sellTo(req.user, id, req.body));
   });
 
   router.delete('/orders/:id', requireUser, orderWrites, async (req, res) => {

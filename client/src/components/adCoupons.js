@@ -11,8 +11,9 @@
  */
 import { conditionText } from '../../../shared/index.js';
 import { h, replaceChildren } from '../dom.js';
-import { api, ApiError } from '../lib/api.js';
+import { api } from '../lib/api.js';
 import { errorsFromUnknown } from '../lib/forms.js';
+import { actionButton } from './actionButton.js';
 import { addCopyForm, minGradeText, sellForm, wantedForm } from './adForms.js';
 import { errorState, loadingState } from './states.js';
 
@@ -125,36 +126,21 @@ function yourAds(orders, onDone) {
       {},
       orders.map((order) => {
         const { kind, text, price } = adLine(order);
-        const error = h('span', { class: 'field-error', role: 'alert' });
-        const cancel = h('button', { class: 'button button--quiet', type: 'button' }, 'Cancel');
-        cancel.addEventListener('click', async () => {
-          cancel.disabled = true;
-          error.textContent = '';
-          try {
-            await api.cancelOrder(order.id);
-            await onDone(
-              order.side === 'bid'
-                ? `Wanted ad cancelled. $${order.price} is back in your spendable cash.`
-                : 'FOR SALE ad cancelled. The copy is back in your crate.',
-            );
-          } catch (failure) {
-            // 409: it filled or was cancelled elsewhere first. Redraw so the list is current.
-            if (failure instanceof ApiError && failure.status === 409) {
-              await onDone(failure.message);
-              return;
-            }
-            error.textContent = errorsFromUnknown(failure).message ?? 'Couldn’t cancel that ad.';
-            cancel.disabled = false;
-          }
-        });
         return h(
           'li',
           {},
           h('span', { class: 'label' }, kind),
           h('span', {}, text),
           h('span', { class: 'your-ad-price' }, price),
-          cancel,
-          error,
+          actionButton({
+            label: 'Cancel',
+            run: () => api.cancelOrder(order.id),
+            done:
+              order.side === 'bid'
+                ? `Wanted ad cancelled. $${order.price} is back in your spendable cash.`
+                : 'FOR SALE ad cancelled. The copy is back in your crate.',
+            onDone,
+          }),
         );
       }),
     ),

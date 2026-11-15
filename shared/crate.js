@@ -9,16 +9,13 @@ import {
   MAX_NOTES_LENGTH,
   PHOTO_TYPES,
 } from './copies.js';
-import { gradeRankSchema, idSchema, storedTextSchema } from './orders.js';
+import { blankAsMissing, gradeRankSchema, idSchema, storedTextSchema } from './orders.js';
 
 /**
  * Active copies one person can have. Far more than a real collection on the demo, and it
  * stops one account filling the free database (each copy can carry 6 photos of 2 MB).
  */
 export const MAX_COPIES_PER_USER = 300;
-
-/** Empty query-string values ("?releaseId=") mean "no filter". */
-const blankAsMissing = (value) => (value === '' ? undefined : value);
 
 /** The body of POST /api/crate. A null sleeveGrade means a generic or missing sleeve. */
 export const addCopySchema = z.object({

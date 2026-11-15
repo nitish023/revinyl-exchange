@@ -151,7 +151,7 @@ export function ledgerRow(trade) {
   if (trade.role === 'buyer') amount = refunded ? `+$${trade.price}` : `−$${trade.price}`;
   else amount = refunded ? '$0.00' : `+$${trade.price}`;
   const status = {
-    awaiting_shipment: trade.role === 'seller' ? 'Ship it' : 'Waiting to ship',
+    awaiting_shipment: trade.role === 'seller' ? 'To ship' : 'Waiting to ship',
     shipped: 'Shipped',
     completed: 'Done',
     refunded: 'Refunded',

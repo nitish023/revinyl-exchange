@@ -19,6 +19,7 @@ import { createPool } from '../src/db/pool.js';
 import { LiveUpdates } from '../src/market/live.js';
 import { CollectionImport } from '../src/collection/importService.js';
 import { OrderService } from '../src/orders/orderService.js';
+import { TradeService } from '../src/trades/tradeService.js';
 
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://revinyl:revinyl@localhost:5433/revinyl_test';
@@ -106,8 +107,9 @@ export function createTestContext() {
   const catalog = new CatalogService({ pool, source: catalogSource, maxAgeMs: CATALOG_MAX_AGE_MS });
   const live = new RecordingLiveUpdates();
   const orders = new OrderService({ pool, catalog, live });
+  const trades = new TradeService({ pool, live });
   const collection = new CollectionImport({ pool, source: catalogSource });
-  return { config, pool, catalog, catalogSource, live, orders, collection };
+  return { config, pool, catalog, catalogSource, live, orders, trades, collection };
 }
 
 /** Empty every table between tests (keeps the schema). */

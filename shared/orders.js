@@ -175,7 +175,7 @@ export const placeOrderSchema = z.discriminatedUnion(
 export const ORDER_STATUSES = Object.freeze(['open', 'filled', 'cancelled']);
 
 /** Empty query-string values ("?status=") mean "no filter". */
-const blankAsMissing = (value) => (value === '' ? undefined : value);
+export const blankAsMissing = (value) => (value === '' ? undefined : value);
 
 /** GET /api/orders?status=&releaseId= */
 export const ordersQuerySchema = z.object({

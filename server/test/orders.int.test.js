@@ -6,15 +6,12 @@ import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_COPIES_PER_USER, MAX_PHOTO_BYTES, STARTING_CASH_CENTS } from '../../shared/index.js';
 import { createApp } from '../src/app.js';
-import { FIXTURE_RELEASE_ID, seedDemo } from '../src/db/seed.js';
+import { seedDemo } from '../src/db/seed.js';
 import { createTestContext, resetDatabase } from './helpers.js';
+import { NM, RELEASE, traders, VG, VG_PLUS } from './traders.js';
 
 const ctx = createTestContext();
 const app = createApp(ctx, { rateLimit: false });
-const RELEASE = FIXTURE_RELEASE_ID;
-const VG = 5;
-const VG_PLUS = 6;
-const NM = 7;
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 8, 7, 6]);
@@ -32,52 +29,10 @@ beforeEach(async () => {
 });
 afterAll(() => ctx.pool.end());
 
-const query = async (sql, params) => (await ctx.pool.query(sql, params)).rows;
-
-/** Sign up a trader and return small helpers that send requests as them. */
-async function signUp(name) {
-  const response = await request(app)
-    .post('/api/auth/register')
-    .send({ email: `${name}@example.com`, displayName: name, password: 'password123' })
-    .expect(201);
-  const cookie = response.headers['set-cookie'][0].split(';')[0];
-  return {
-    id: response.body.user.id,
-    get: (path) => request(app).get(path).set('Cookie', cookie),
-    post: (path, body) => request(app).post(path).set('Cookie', cookie).send(body),
-    del: (path) => request(app).delete(path).set('Cookie', cookie),
-    upload: (path, bytes, type) =>
-      request(app).post(path).set('Cookie', cookie).set('Content-Type', type).send(bytes),
-  };
-}
-
-async function addCopy(user, overrides = {}) {
-  const response = await user
-    .post('/api/crate', { releaseId: RELEASE, grade: VG_PLUS, sleeveGrade: VG_PLUS, ...overrides })
-    .expect(201);
-  return response.body.copy;
-}
-
-/** List a new copy of the given grade for sale; returns the ask and the copy. */
-async function listCopy(user, price, grade = VG_PLUS) {
-  const copy = await addCopy(user, { grade });
-  const response = await user
-    .post('/api/orders', { side: 'ask', copyId: copy.id, price })
-    .expect(201);
-  return { copy, ...response.body };
-}
-
-function placeBid(user, price, minGrade = VG_PLUS, extra = {}) {
-  return user.post('/api/orders', { side: 'bid', releaseId: RELEASE, price, minGrade, ...extra });
-}
-
-async function walletOf(user) {
-  return (await user.get('/api/wallet').expect(200)).body.wallet;
-}
-
-async function copyStatus(copyId) {
-  return (await query('SELECT status FROM copies WHERE id = $1', [copyId]))[0].status;
-}
+const { query, signUp, addCopy, listCopy, placeBid, walletOf, copyStatus, hookQueries } = traders(
+  ctx,
+  app,
+);
 
 describe('wallet', () => {
   it('a new account starts with $2,000 and nothing held', async () => {
@@ -259,7 +214,7 @@ describe('crate', () => {
     const first = await alice.upload(path, PNG, 'image/png').expect(201);
     // The claimed type is ignored: the bytes say JPEG, so it is stored as JPEG.
     await alice.upload(path, JPEG, 'image/png').expect(201);
-    const served = await request(app).get(first.body.photo.url).expect(200);
+    const served = await alice.get(first.body.photo.url).expect(200);
 
     expect(first.body.photo).toEqual({
       position: 1,
@@ -267,7 +222,7 @@ describe('crate', () => {
     });
     expect(served.headers['content-type']).toBe('image/png');
     expect(Buffer.compare(served.body, PNG)).toBe(0);
-    const second = await request(app).get(`/api/copies/${copy.id}/photos/2`).expect(200);
+    const second = await alice.get(`/api/copies/${copy.id}/photos/2`).expect(200);
     expect(second.headers['content-type']).toBe('image/jpeg');
     const listed = (await alice.get('/api/crate').expect(200)).body.copies[0];
     expect(listed.photos.map((photo) => photo.position)).toEqual([1, 2]);
@@ -281,7 +236,7 @@ describe('crate', () => {
     await request(app).post(path).set('Content-Type', 'image/png').send(PNG).expect(401);
 
     const webp = await alice.upload(path, WEBP, 'image/webp').expect(201);
-    expect((await request(app).get(webp.body.photo.url).expect(200)).headers['content-type']).toBe(
+    expect((await alice.get(webp.body.photo.url).expect(200)).headers['content-type']).toBe(
       'image/webp',
     );
     for (let position = 4; position <= 6; position += 1) {
@@ -291,6 +246,47 @@ describe('crate', () => {
     expect(seventh.body.error.code).toBe('PHOTO_LIMIT');
     await request(app).get(`/api/copies/${copy.id}/photos/7`).expect(400);
     await request(app).get(`/api/copies/999/photos/1`).expect(404);
+  });
+
+  it('shows a copy’s photos to everyone only while it’s listed or in a trade', async () => {
+    const alice = await signUp('alice');
+    const bob = await signUp('bob');
+    const copy = await addCopy(alice);
+    const { url } = (await alice.upload(`/api/crate/${copy.id}/photos`, PNG, 'image/png')).body
+      .photo;
+
+    // In the crate: the owner only, and never kept in a shared cache.
+    const own = await alice.get(url).expect(200);
+    expect(own.headers['cache-control']).toBe('private, no-cache');
+    await bob.get(url).expect(404);
+    await request(app).get(url).expect(404);
+
+    // On an ad: anyone.
+    await alice.post('/api/orders', { side: 'ask', copyId: copy.id, price: '30' }).expect(201);
+    const shown = await request(app).get(url).expect(200);
+    expect(shown.headers['cache-control']).toBe('public, max-age=3600');
+
+    // In a trade, then back in the buyer's crate once it completes.
+    await placeBid(bob, '30').expect(201);
+    await request(app).get(url).expect(200);
+    const [trade] = await query('SELECT id FROM trades');
+    await alice.post(`/api/trades/${trade.id}/ship`, {}).expect(200);
+    await bob.post(`/api/trades/${trade.id}/received`, {}).expect(200);
+    await bob.get(url).expect(200);
+    await alice.get(url).expect(404);
+    await request(app).get(url).expect(404);
+  });
+
+  it('tells the market when a listed copy gets a new photo, not when one in the crate does', async () => {
+    const alice = await signUp('alice');
+    const crated = await addCopy(alice);
+    const { copy: listed } = await listCopy(alice, '30');
+    ctx.live.markets.length = 0;
+
+    await alice.upload(`/api/crate/${crated.id}/photos`, PNG, 'image/png').expect(201);
+    expect(ctx.live.markets).toEqual([]);
+    await alice.upload(`/api/crate/${listed.id}/photos`, PNG, 'image/png').expect(201);
+    expect(ctx.live.markets).toEqual([RELEASE]);
   });
 
   it('stops serving the photos of a removed copy', async () => {
@@ -454,8 +450,24 @@ describe('placing a wanted ad (bid)', () => {
             userId: seller.id,
             message: { type: 'order', releaseId: RELEASE, orderId: ask.id, status: 'filled' },
           },
-          { userId: buyer.id, message: { type: 'trade', releaseId: RELEASE, tradeId: trade.id } },
-          { userId: seller.id, message: { type: 'trade', releaseId: RELEASE, tradeId: trade.id } },
+          {
+            userId: buyer.id,
+            message: {
+              type: 'trade',
+              releaseId: RELEASE,
+              tradeId: trade.id,
+              status: 'awaiting_shipment',
+            },
+          },
+          {
+            userId: seller.id,
+            message: {
+              type: 'trade',
+              releaseId: RELEASE,
+              tradeId: trade.id,
+              status: 'awaiting_shipment',
+            },
+          },
           { userId: buyer.id, message: { type: 'wallet', releaseId: RELEASE } },
         ]),
       );
@@ -816,33 +828,3 @@ describe('keeping the book and the database in step', () => {
     for (const row of holds) expect(row.held_cents).toBe(row.open);
   });
 });
-
-/**
- * Make some database queries inside transactions fail or run slowly, to test what a
- * failure leaves behind and what happens when two requests overlap.
- * `decide(sql)` returns 'fail', a delay in milliseconds, or null to run the query normally.
- * Returns the spy; call mockRestore() to stop.
- * @param {(sql: string) => 'fail' | number | null} decide
- */
-function hookQueries(decide) {
-  const connect = ctx.pool.connect.bind(ctx.pool);
-  return vi.spyOn(ctx.pool, 'connect').mockImplementation(async (...args) => {
-    // pool.query() calls connect(callback) internally; leave that path alone.
-    if (args.length > 0) return connect(...args);
-    const client = await connect();
-    const realQuery = client.query;
-    const realRelease = client.release;
-    client.query = async function (sql, ...rest) {
-      const action = typeof sql === 'string' ? decide(sql) : null;
-      if (action === 'fail') throw new Error('simulated database failure');
-      if (typeof action === 'number') await new Promise((resolve) => setTimeout(resolve, action));
-      return realQuery.call(this, sql, ...rest);
-    };
-    client.release = function (...args) {
-      client.query = realQuery; // the client goes back to the pool working normally
-      client.release = realRelease;
-      return realRelease.apply(this, args);
-    };
-    return client;
-  });
-}
