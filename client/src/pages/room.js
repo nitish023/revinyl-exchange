@@ -4,7 +4,7 @@
  * wanted ads and your ledger. Replaces the old /crate page (which now comes here).
  * Design: the RoomAiry board on the design canvas.
  */
-import { gradeByRank } from '../../../shared/index.js';
+import { conditionFlagLabel, gradeByRank } from '../../../shared/index.js';
 import { actionButton } from '../components/actionButton.js';
 import { cover } from '../components/cover.js';
 import { emptyState, errorState, loadingState } from '../components/states.js';
@@ -43,6 +43,33 @@ function counterBox(counter) {
     h('p', { class: 'room-counter-text' }, counterText(counter)),
     h('a', { class: 'link-arrow', href: releasePath(counter.release.id) }, 'See the wanted ad →'),
   );
+}
+
+/** What the seller wrote about a copy, its condition flags and its photos (copies only). */
+function copyDetails(item) {
+  if (item.kind !== 'copy') return null;
+  const flags = item.flags.map(conditionFlagLabel).filter(Boolean);
+  const parts = [
+    item.headline ? h('p', { class: 'ad-lead' }, item.headline.toUpperCase()) : null,
+    item.notes ? h('p', { class: 'shelf-notes' }, item.notes) : null,
+    flags.length
+      ? h('p', { class: 'field-hint' }, `Known issues: ${flags.join(', ').toLowerCase()}`)
+      : null,
+    item.photos.length
+      ? h(
+          'div',
+          { class: 'shelf-photos' },
+          item.photos.map((photo) =>
+            h('img', {
+              src: photo.url,
+              alt: `Photo ${photo.position} of your copy of ${item.release.title}`,
+              loading: 'lazy',
+            }),
+          ),
+        )
+      : null,
+  ].filter(Boolean);
+  return parts.length ? h('div', { class: 'shelf-details' }, parts) : null;
 }
 
 /** @param {(message: string) => void} done reload and show a message */
@@ -89,6 +116,7 @@ function shelfCard(item, done) {
         ),
       ),
     ),
+    copyDetails(item),
     action,
   );
 }
@@ -169,6 +197,7 @@ function ledgerSection(room, done) {
       h('h2', { id: 'ledger-title' }, 'Your ledger'),
       h('p', {}, 'Every trade, newest first'),
     ),
+    room.ledgerMore ? h('p', { class: 'room-none' }, 'Showing your latest 50 trades.') : null,
     room.ledger.length === 0
       ? h('p', { class: 'room-none' }, 'No trades yet. Your first one will be written down here.')
       : h(

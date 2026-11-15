@@ -128,15 +128,21 @@ describe('DiscogsClient collections', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ message: 'User does not exist.' }, 404))
-      .mockResolvedValueOnce(jsonResponse({ message: 'You must authenticate.' }, 401))
       .mockResolvedValueOnce(jsonResponse({ message: 'Forbidden.' }, 403));
     const discogs = client(fetchMock);
     expect(await discogs.getConditionFields('nobody')).toBeNull();
-    for (let i = 0; i < 2; i += 1) {
-      await expect(discogs.getCollectionPage('shy', 1, fields)).rejects.toMatchObject({
-        reason: 'private',
-      });
-    }
+    await expect(discogs.getCollectionPage('shy', 1, fields)).rejects.toMatchObject({
+      reason: 'private',
+    });
+  });
+
+  it('tells a rejected token (401) apart from a private collection', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ message: 'You must authenticate.' }, 401));
+    await expect(client(fetchMock).getCollectionPage('digger', 1, fields)).rejects.toMatchObject({
+      reason: 'unauthorized',
+    });
   });
 
   it('keeps a username in its own path segment', async () => {

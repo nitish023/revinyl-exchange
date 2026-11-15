@@ -163,8 +163,12 @@ export class DiscogsClient {
 
     if (response.status === 404) return null;
     // A private collection: only its owner may read it.
-    if (response.status === 401 || response.status === 403) {
-      throw new DiscogsUnavailableError('private', `Discogs answered ${response.status}`);
+    if (response.status === 403) {
+      throw new DiscogsUnavailableError('private', 'Discogs answered 403');
+    }
+    // 401 means Discogs didn't accept our token (wrong or revoked): our problem, not theirs.
+    if (response.status === 401) {
+      throw new DiscogsUnavailableError('unauthorized', 'Discogs rejected our token');
     }
     if (response.status === 429) {
       this.pausedUntil = this.now() + PAUSE_AFTER_429_MS;

@@ -73,6 +73,31 @@ describe('the shelf', () => {
   });
 });
 
+describe('copy details', () => {
+  it('include what the owner wrote, the flags and the photos', async () => {
+    const owner = await idOf('groovegarden');
+    const [{ id }] = (
+      await ctx.pool.query(
+        `UPDATE copies SET headline = 'Played twice.', notes = 'Quiet.', flags = '{warp}'
+          WHERE owner_id = $1 AND status = 'in_crate' RETURNING id`,
+        [owner],
+      )
+    ).rows;
+    await ctx.pool.query(
+      `INSERT INTO copy_photos (copy_id, position, content_type, bytes)
+       VALUES ($1, 2, 'image/png', '\\x89504e47')`,
+      [id],
+    );
+    const copy = (await roomOf('groovegarden')).shelf.find((item) => item.copyId === id);
+    expect(copy).toMatchObject({
+      headline: 'Played twice.',
+      notes: 'Quiet.',
+      flags: ['warp'],
+      photos: [{ position: 2, url: `/api/copies/${id}/photos/2` }],
+    });
+  });
+});
+
 describe('wanted ads', () => {
   it('say what the cheapest good-enough copy costs and how many others are waiting', async () => {
     const room = await roomOf('secondspin');
@@ -94,6 +119,31 @@ describe('wanted ads', () => {
 });
 
 describe('the ledger', () => {
+  it('shows the latest 50 trades and says when there are more', async () => {
+    expect((await roomOf('groovegarden')).ledgerMore).toBe(false);
+    const [buyer, seller] = [await idOf('groovegarden'), await idOf('paperlantern')];
+    // 50 more finished trades, written straight in: only the ledger reads them.
+    await ctx.pool.query(
+      `WITH c AS (INSERT INTO copies (owner_id, release_id, grade)
+                  SELECT $1, $3, 6 FROM generate_series(1, 50) RETURNING id),
+            o AS (SELECT id AS copy_id, row_number() OVER () AS n FROM c),
+            asks AS (INSERT INTO orders (user_id, release_id, side, price_cents, copy_id, status, closed_at)
+                     SELECT $2, $3, 'ask', 1000, copy_id, 'filled', now() FROM o RETURNING id, copy_id),
+            bids AS (INSERT INTO orders (user_id, release_id, side, price_cents, min_grade, status, closed_at)
+                     SELECT $1, $3, 'bid', 1000, 6, 'filled', now() FROM o RETURNING id),
+            paired AS (SELECT a.id AS ask_id, a.copy_id, b.id AS bid_id
+                         FROM (SELECT *, row_number() OVER (ORDER BY id) AS n FROM asks) a
+                         JOIN (SELECT *, row_number() OVER (ORDER BY id) AS n FROM bids) b USING (n))
+       INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
+                           buyer_id, seller_id, status)
+       SELECT $3, copy_id, 6, 1000, bid_id, ask_id, $1, $2, 'completed' FROM paired`,
+      [buyer, seller, FIXTURE_RELEASE_ID],
+    );
+    const room = await roomOf('groovegarden');
+    expect(room.ledger).toHaveLength(50);
+    expect(room.ledgerMore).toBe(true);
+  });
+
   it('lists every trade I was in, newest first, with my side', async () => {
     const room = await roomOf('groovegarden');
     expect(room.ledger.map((trade) => [trade.role, trade.price, trade.status])).toEqual([

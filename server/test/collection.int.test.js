@@ -7,7 +7,11 @@ import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { MAX_COPIES_PER_USER, MAX_IMPORT } from '../../shared/index.js';
 import { createApp } from '../src/app.js';
-import { MAX_PAGES } from '../src/collection/importService.js';
+import {
+  COLLECTION_CACHE_MS,
+  CollectionImport,
+  MAX_PAGES,
+} from '../src/collection/importService.js';
 import { createTestContext, resetDatabase } from './helpers.js';
 
 const ctx = createTestContext();
@@ -57,13 +61,13 @@ describe('preview', () => {
 
     expect(body.username).toBe('digger');
     expect(body.skipped).toBe(1); // the CD
+    expect(body.alreadyImported).toBe(0);
     expect(body.more).toBe(false);
     expect(body.crateRoom).toBe(MAX_COPIES_PER_USER);
     expect(body.items.map((item) => item.instanceId)).toEqual([900001, 900002, 900003, 900005]);
     expect(body.items[0]).toMatchObject({
       grade: 6,
       sleeveGrade: 5,
-      alreadyImported: false,
       release: { id: 249504, title: 'Never Gonna Give You Up', artist: 'Rick Astley' },
     });
     expect(body.items[1]).toMatchObject({ grade: 7, sleeveGrade: 'generic' });
@@ -97,10 +101,47 @@ describe('preview', () => {
     ctx.catalogSource.collectionRepeat = 1; // 4 vinyl a page
     ctx.catalogSource.collectionPages = 50;
     ctx.catalogSource.collectionCalls = 0;
+    ctx.collection.clearPreviews(); // forget the cached pages from the first look-up
     const thin = (await alice.preview('digger').expect(200)).body;
     expect(thin.items).toHaveLength(4 * MAX_PAGES);
     expect(thin.more).toBe(true);
     expect(ctx.catalogSource.collectionCalls).toBe(1 + MAX_PAGES);
+  });
+
+  it('asks Discogs once per collection for 10 minutes, whoever looks it up', async () => {
+    const alice = await signUp('alice');
+    const bob = await signUp('bob');
+    await alice.preview('digger').expect(200);
+    await bob.preview('Digger').expect(200);
+    await alice
+      .import({ username: 'digger', items: [{ instanceId: 900002, grade: 7, sleeveGrade: null }] })
+      .expect(201);
+    expect(ctx.catalogSource.collectionCalls).toBe(2); // the fields and one page, once
+
+    let clock = Date.now();
+    const later = new CollectionImport({
+      pool: ctx.pool,
+      source: ctx.catalogSource,
+      now: () => clock,
+    });
+    ctx.catalogSource.collectionCalls = 0;
+    await later.preview(alice.id, { username: 'digger' });
+    await later.preview(alice.id, { username: 'digger' });
+    expect(ctx.catalogSource.collectionCalls).toBe(2);
+    clock += COLLECTION_CACHE_MS + 1;
+    await later.preview(alice.id, { username: 'digger' });
+    expect(ctx.catalogSource.collectionCalls).toBe(4);
+  });
+
+  it('says our Discogs token was rejected, not that the collection is private', async () => {
+    const alice = await signUp();
+    const { DiscogsUnavailableError } = await import('../src/catalog/discogsClient.js');
+    ctx.catalogSource.failWith = new DiscogsUnavailableError(
+      'unauthorized',
+      'Discogs rejected our token',
+    );
+    const response = await alice.preview('digger').expect(503);
+    expect(response.body.error.code).toBe('CATALOG_NOT_CONFIGURED');
   });
 
   it('answers 503 when Discogs is down', async () => {
@@ -175,18 +216,47 @@ describe('import', () => {
     expect(release.fetched_at.getTime()).toBeGreaterThan(0);
   });
 
-  it('skips records already imported, and marks them in the next preview', async () => {
+  it('leaves records already imported out of the next preview', async () => {
     const alice = await signUp();
     const first = (await alice.preview('digger').expect(200)).body;
     await alice.import({ username: 'digger', items: choose(first.items.slice(0, 2)) }).expect(201);
 
     const again = (await alice.preview('digger').expect(200)).body;
-    expect(again.items.map((item) => item.alreadyImported)).toEqual([true, true, false, false]);
+    expect(again.items.map((item) => item.instanceId)).toEqual([900003, 900005]);
+    expect(again.alreadyImported).toBe(2);
     const { body } = await alice
       .import({ username: 'digger', items: choose(again.items) })
       .expect(201);
-    expect(body).toEqual({ imported: 2, alreadyImported: 2 });
+    expect(body).toEqual({ imported: 2, alreadyImported: 0 });
     expect(await query('SELECT count(*)::int AS n FROM copies')).toEqual([{ n: 4 }]);
+  });
+
+  it('never imports the same record twice, even from an old preview in another tab', async () => {
+    const alice = await signUp();
+    const { items } = (await alice.preview('digger').expect(200)).body;
+    const chosen = choose(items.slice(0, 2));
+    await alice.import({ username: 'digger', items: chosen }).expect(201);
+    const { body } = await alice.import({ username: 'digger', items: chosen }).expect(201);
+    expect(body).toEqual({ imported: 0, alreadyImported: 2 });
+    expect(await query('SELECT count(*)::int AS n FROM copies')).toEqual([{ n: 2 }]);
+  });
+
+  it(`brings up the next records once the first ${MAX_IMPORT} are in`, async () => {
+    const alice = await signUp();
+    ctx.catalogSource.collectionRepeat = 30; // 120 vinyl on one page
+    const first = (await alice.preview('digger').expect(200)).body;
+    expect(first.items).toHaveLength(MAX_IMPORT);
+    expect(first.more).toBe(true);
+    await alice.import({ username: 'digger', items: choose(first.items) }).expect(201);
+
+    const next = (await alice.preview('digger').expect(200)).body;
+    expect(next.items).toHaveLength(120 - MAX_IMPORT);
+    expect(next.alreadyImported).toBe(MAX_IMPORT);
+    expect(next.more).toBe(false);
+    expect(new Set(next.items.map((item) => item.instanceId)).size).toBe(20);
+    expect(
+      next.items.some((item) => first.items.some((old) => old.instanceId === item.instanceId)),
+    ).toBe(false);
   });
 
   it('lets a removed import come back', async () => {

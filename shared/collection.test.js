@@ -65,6 +65,9 @@ describe('the import request', () => {
   it('only takes usernames Discogs could have', () => {
     expect(discogsUsernameSchema.safeParse('rodney.fool-2').success).toBe(true);
     expect(discogsUsernameSchema.safeParse('../admin').success).toBe(false);
+    expect(discogsUsernameSchema.safeParse('.').success).toBe(false);
+    expect(discogsUsernameSchema.safeParse('..').success).toBe(false);
+    expect(discogsUsernameSchema.safeParse('-dash').success).toBe(false);
     expect(discogsUsernameSchema.safeParse('a b').success).toBe(false);
   });
 });

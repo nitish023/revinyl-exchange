@@ -28,7 +28,6 @@ const item = (instanceId, overrides = {}) => ({
   },
   grade: 6,
   sleeveGrade: 5,
-  alreadyImported: false,
   ...overrides,
 });
 
@@ -58,9 +57,9 @@ beforeEach(() => {
       item(1),
       item(2, { grade: 7, sleeveGrade: 'generic' }),
       item(3, { grade: null, sleeveGrade: null }),
-      item(4, { alreadyImported: true }),
     ],
     skipped: 1,
+    alreadyImported: 2,
     more: false,
     crateRoom: 296,
   });
@@ -88,19 +87,20 @@ describe('roomImportPage', () => {
     );
   });
 
-  it('lists the records with Discogs’ grades filled in and imported ones locked', async () => {
+  it('lists the records with Discogs’ grades filled in', async () => {
     const element = page();
     await lookUp(element);
     expect(api.collectionPreview).toHaveBeenCalledWith('digger', expect.anything());
     const rows = [...element.querySelectorAll('.import-row')];
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(3);
     const selects = (row) => [...row.querySelectorAll('select')].map((select) => select.value);
     expect(selects(rows[0])).toEqual(['6', '5']);
     expect(selects(rows[1])).toEqual(['7', 'generic']);
     expect(selects(rows[2])).toEqual(['', '']);
-    expect(rows[3].querySelector('input').disabled).toBe(true);
     expect(text(element.querySelector('.import-count'))).toBe('3 of 3 ticked');
-    expect(text(element.querySelector('.import-summary'))).toContain('left out 1');
+    const summary = text(element.querySelector('.import-summary'));
+    expect(summary).toContain('2 already on your shelf aren’t listed');
+    expect(summary).toContain('left out 1');
   });
 
   it('asks for the grades that are missing before importing', async () => {
@@ -112,9 +112,34 @@ describe('roomImportPage', () => {
     await settle();
     expect(api.importCollection).not.toHaveBeenCalled();
     expect(text(element.querySelector('.import-preview .form-banner'))).toMatch(
-      /Pick a record grade for one record/,
+      /Pick the grades for one record/,
     );
-    expect(text(element.querySelectorAll('.import-row')[2])).toContain('Pick a grade');
+    expect(text(element.querySelectorAll('.import-row')[2])).toContain('Pick both grades');
+  });
+
+  it('needs a sleeve choice too: Generic sleeve counts, blank doesn’t', async () => {
+    const element = page();
+    await lookUp(element);
+    const third = element.querySelectorAll('.import-row')[2];
+    third.querySelector('select').value = '5';
+    element
+      .querySelector('.import-preview')
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle();
+    expect(api.importCollection).not.toHaveBeenCalled();
+    expect(text(third)).toContain('Pick the sleeve’s grade, or Generic sleeve');
+
+    third.querySelectorAll('select')[1].value = 'generic';
+    api.importCollection.mockResolvedValue({ imported: 3, alreadyImported: 0 });
+    element
+      .querySelector('.import-preview')
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle();
+    expect(api.importCollection.mock.calls[0][0].items[2]).toEqual({
+      instanceId: 3,
+      grade: 5,
+      sleeveGrade: null,
+    });
   });
 
   it('imports the ticked records with the chosen grades', async () => {

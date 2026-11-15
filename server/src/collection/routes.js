@@ -9,9 +9,10 @@ import { rateLimiter } from '../http/rateLimit.js';
  */
 export function collectionRouter(ctx, { rateLimit }) {
   const router = Router();
-  // A look-up costs up to six of our shared Discogs requests (30 a minute for everyone).
-  const lookups = rateLimiter({ enabled: rateLimit, windowMs: 60_000, limit: 6 });
-  const imports = rateLimiter({ enabled: rateLimit, windowMs: 60_000, limit: 10 });
+  // A look-up can cost up to six of the 30 Discogs requests a minute every visitor shares
+  // (repeats within 10 minutes come from our cache), so two a minute per account.
+  const lookups = rateLimiter({ enabled: rateLimit, windowMs: 60_000, limit: 2, perUser: true });
+  const imports = rateLimiter({ enabled: rateLimit, windowMs: 60_000, limit: 10, perUser: true });
 
   router.get('/collection/discogs', requireUser, lookups, async (req, res) => {
     res.json(await ctx.collection.preview(req.user.id, req.query));

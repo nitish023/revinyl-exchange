@@ -19,6 +19,9 @@ Read this before you start a part. If a rule needs to change, change it here in 
   leave out `removed_at IS NOT NULL` copies anywhere you list a user's records.
 - **Orders go through `ctx.orders`** (`server/src/orders/orderService.js`): never write `orders`, held cash or a
   copy's status from anywhere else, or the in-memory book stops matching the database.
+- **Imported copies:** `copies.discogs_instance_id` ties an imported copy to its owner's Discogs collection, and only
+  one active copy per owner may have each instance id (migration 005). Whenever a copy changes owner (a trade
+  completes, Part 5), set `discogs_instance_id` to NULL in the same update: it belonged to the old owner's collection.
 - **Live updates:** after a commit that changes a pressing's market, call `ctx.live.marketChanged(releaseId)`, and
   `ctx.live.notifyUser(userId, message)` for private changes. Never before the commit.
 - **Database:** plain SQL with `$1` parameters, never string-built SQL. A schema change is a new numbered file in
@@ -42,10 +45,12 @@ Read this before you start a part. If a rule needs to change, change it here in 
 2. Pressings are cached in `releases` and refreshed after `CATALOG_MAX_AGE_HOURS`. Anything that refers to a pressing
    (copies, orders, trades) calls `ctx.catalog.ensureRelease(id)` first and uses `releases(id)` as its foreign key.
 3. Vinyl only. Never store or show Discogs marketplace prices: our prices come only from our own trades.
-4. **Collection import** (Part 6) reads public collections only (we can't log in as their owner), at most 6 requests
-   per look-up. Imported pressings are cached from the collection's basic information with `fetched_at` in 1970, so
-   their page fetches the full release the first time it's opened. We can't verify that a Discogs account belongs to
-   the person importing it without Discogs OAuth; with play money that's accepted.
+4. **Collection import** (Part 6) reads public collections only (we can't log in as their owner). A look-up costs
+   up to 6 requests, so what Discogs sends is reused for 10 minutes per username, and each account gets 2 look-ups a
+   minute. A look-up lists the next 100 vinyl records you haven't imported yet. Imported pressings are cached from
+   the collection's basic information with `fetched_at` in 1970, so their page fetches the full release the first
+   time it's opened. We can't verify that a Discogs account belongs to the person importing it without Discogs OAuth;
+   with play money that's accepted.
 5. Pages that show Discogs data credit it with a link and say we're not affiliated (the footer does this on every
    page). Covers load from `https://i.discogs.com` only (allowed in the CSP in `server/src/app.js`).
 

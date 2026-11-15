@@ -6,7 +6,7 @@
  *   shelf     your copies (in the crate, listed, or sold and waiting to ship) and records
  *             you bought that are on their way to you
  *   wanted    your open WANTED ads, each with how the market looks for it
- *   ledger    every trade you were in, newest first
+ *   ledger    the trades you were in, newest first (the latest 50; ledgerMore says if there are more)
  *   counter   the best WANTED ad from someone else that a copy on your shelf could fill
  *   value     what your shelf would fetch at today's best offers
  *
@@ -37,7 +37,9 @@ export async function loadRoom(db, userId) {
     db.query(
       `SELECT c.id, c.release_id, c.grade, c.sleeve_grade, c.status, c.source, c.headline,
               r.title, r.artist, r.year, r.thumb_url,
-              (SELECT count(*) FROM copy_photos p WHERE p.copy_id = c.id) AS photos,
+              c.notes, c.flags,
+              array(SELECT p.position FROM copy_photos p
+                     WHERE p.copy_id = c.id ORDER BY p.position) AS photos,
               ask.id AS ask_id, ask.price_cents AS ask_price_cents,
               t.id AS trade_id, t.status AS trade_status
          FROM copies c
@@ -85,7 +87,7 @@ export async function loadRoom(db, userId) {
          JOIN releases r ON r.id = t.release_id
         WHERE t.buyer_id = $1 OR t.seller_id = $1
         ORDER BY t.created_at DESC, t.id DESC
-        LIMIT ${LEDGER_LIMIT}`,
+        LIMIT ${LEDGER_LIMIT + 1}`,
       [userId],
     ),
     // The best WANTED ad someone else is running that one of my copies (in the crate or
@@ -144,7 +146,13 @@ export async function loadRoom(db, userId) {
         condition: conditionText(row.grade, row.sleeve_grade),
         status: row.status,
         imported: row.source === 'discogs_import',
-        photos: row.photos,
+        headline: row.headline,
+        notes: row.notes,
+        flags: row.flags,
+        photos: row.photos.map((position) => ({
+          position,
+          url: `/api/copies/${row.id}/photos/${position}`,
+        })),
         ask: row.ask_id ? { orderId: row.ask_id, price: formatCents(row.ask_price_cents) } : null,
         tradeId: row.trade_id,
         tradeStatus: row.trade_status,
@@ -159,7 +167,9 @@ export async function loadRoom(db, userId) {
       cheapest: row.cheapest_cents === null ? null : formatCents(row.cheapest_cents),
       otherBuyers: row.other_buyers,
     })),
-    ledger: ledger.rows.map((row) => ({
+    // One more row than we show tells the page there's more history than this.
+    ledgerMore: ledger.rows.length > LEDGER_LIMIT,
+    ledger: ledger.rows.slice(0, LEDGER_LIMIT).map((row) => ({
       id: row.id,
       role: row.role,
       status: row.status,

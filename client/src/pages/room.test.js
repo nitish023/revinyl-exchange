@@ -38,7 +38,10 @@ const copy = (copyId, overrides = {}) => ({
   condition: 'VG+/VG',
   status: 'in_crate',
   imported: false,
-  photos: 0,
+  headline: '',
+  notes: '',
+  flags: [],
+  photos: [],
   ask: null,
   tradeId: null,
   tradeStatus: null,
@@ -59,7 +62,12 @@ function sampleRoom() {
         tradeStatus: 'shipped',
         price: '64.00',
       },
-      copy(1),
+      copy(1, {
+        headline: 'Played twice.',
+        notes: 'Quiet all the way through.',
+        flags: ['seam_split'],
+        photos: [{ position: 1, url: '/api/copies/1/photos/1' }],
+      }),
       copy(2, { status: 'listed', ask: { orderId: 9, price: '44.00' } }),
     ],
     wanted: [
@@ -136,6 +144,26 @@ describe('roomPage', () => {
       'Listed at $44.00',
     ]);
     expect(element.querySelector('a[href="/room/import"]')).not.toBeNull();
+  });
+
+  it('shows what I wrote about each copy, its condition flags and its photos', async () => {
+    const element = page();
+    await settle();
+    const details = element.querySelector('.shelf-details');
+    expect([...details.querySelectorAll('p')].map(text)).toEqual([
+      'PLAYED TWICE.',
+      'Quiet all the way through.',
+      'Known issues: split seam',
+    ]);
+    expect(details.querySelector('img').getAttribute('src')).toBe('/api/copies/1/photos/1');
+    expect(element.querySelectorAll('.shelf-details')).toHaveLength(1);
+  });
+
+  it('says when the ledger only shows the latest 50 trades', async () => {
+    api.room.mockResolvedValue({ room: { ...sampleRoom(), ledgerMore: true } });
+    const element = page();
+    await settle();
+    expect(text(element.querySelector('.room-ledger'))).toContain('Showing your latest 50 trades.');
   });
 
   it('lists wanted ads and the ledger, with Part 5’s buttons on each trade', async () => {

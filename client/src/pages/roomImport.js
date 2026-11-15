@@ -138,12 +138,12 @@ export const roomImportPage = (ctx) => {
   });
 
   function previewView(preview) {
-    const importable = preview.items.filter((item) => !item.alreadyImported);
+    // Records already on your shelf aren't in the list at all (the server leaves them out).
+    const importable = preview.items;
     const rows = preview.items.map((item) => {
       const tick = h('input', {
         type: 'checkbox',
-        checked: !item.alreadyImported,
-        disabled: item.alreadyImported,
+        checked: true,
         'aria-label': `Bring in ${item.release.title}`,
       });
       const grade = gradeSelect({
@@ -155,14 +155,10 @@ export const roomImportPage = (ctx) => {
         value: item.sleeveGrade,
         sleeve: true,
       });
-      if (item.alreadyImported) {
-        grade.disabled = true;
-        sleeve.disabled = true;
-      }
       const error = h('span', { class: 'field-error', role: 'alert' });
       const element = h(
         'li',
-        { class: `import-row${item.alreadyImported ? ' import-row--done' : ''}` },
+        { class: 'import-row' },
         h('label', { class: 'import-tick' }, tick),
         cover(item.release.thumbUrl, `Cover of ${item.release.title}`, {
           size: 'thumb',
@@ -174,7 +170,6 @@ export const roomImportPage = (ctx) => {
           h('p', { class: 'record-title' }, item.release.title),
           h('p', { class: 'record-artist' }, item.release.artist),
           h('p', { class: 'record-meta' }, describe(item.release)),
-          item.alreadyImported ? h('p', { class: 'label' }, 'Already on your shelf') : null,
         ),
         h(
           'div',
@@ -193,13 +188,13 @@ export const roomImportPage = (ctx) => {
     const banner = h('div', { class: 'form-banner', role: 'alert', hidden: true });
     const submit = h('button', { class: 'button', type: 'submit' }, 'Bring them in');
     const updateCount = () => {
-      const ticked = rows.filter((row) => row.tick.checked && !row.tick.disabled).length;
+      const ticked = rows.filter((row) => row.tick.checked).length;
       count.textContent = `${ticked} of ${importable.length} ticked`;
       submit.disabled = ticked === 0;
     };
     for (const row of rows) row.tick.addEventListener('change', updateCount);
     const setAll = (checked) => {
-      for (const row of rows) if (!row.tick.disabled) row.tick.checked = checked;
+      for (const row of rows) row.tick.checked = checked;
       updateCount();
     };
     updateCount();
@@ -217,8 +212,13 @@ export const roomImportPage = (ctx) => {
         'p',
         { class: 'import-summary' },
         preview.items.length === 0
-          ? 'We didn’t find any vinyl in that collection.'
+          ? preview.alreadyImported
+            ? 'Every vinyl record in that collection is already on your shelf.'
+            : 'We didn’t find any vinyl in that collection.'
           : `${preview.items.length} vinyl records, newest first.`,
+        preview.alreadyImported && preview.items.length
+          ? ` ${preview.alreadyImported} already on your shelf aren’t listed.`
+          : '',
         preview.skipped ? ` We left out ${preview.skipped} that aren’t vinyl.` : '',
         preview.more
           ? ' Your collection has more; bring these in, then come back for the rest.'
@@ -254,29 +254,43 @@ export const roomImportPage = (ctx) => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       banner.hidden = true;
-      const chosen = rows.filter((row) => row.tick.checked && !row.tick.disabled);
+      const chosen = rows.filter((row) => row.tick.checked);
       let missing = 0;
       for (const row of rows) {
-        const needsGrade = chosen.includes(row) && readGrade(row.grade) === undefined;
-        row.error.textContent = needsGrade ? 'Pick a grade' : '';
-        if (needsGrade) row.grade.setAttribute('aria-invalid', 'true');
-        else row.grade.removeAttribute('aria-invalid');
-        if (needsGrade) missing += 1;
+        // Both grades are needed: the sleeve can be "Generic sleeve", but not left blank.
+        const ticked = chosen.includes(row);
+        const noRecord = ticked && readGrade(row.grade) === undefined;
+        const noSleeve = ticked && readGrade(row.sleeve) === undefined;
+        row.error.textContent =
+          noRecord && noSleeve
+            ? 'Pick both grades'
+            : noRecord
+              ? 'Pick the record’s grade'
+              : noSleeve
+                ? 'Pick the sleeve’s grade, or Generic sleeve'
+                : '';
+        for (const [select, empty] of [
+          [row.grade, noRecord],
+          [row.sleeve, noSleeve],
+        ]) {
+          if (empty) select.setAttribute('aria-invalid', 'true');
+          else select.removeAttribute('aria-invalid');
+        }
+        if (noRecord || noSleeve) missing += 1;
       }
       const body = {
         username: preview.username,
         items: chosen.map((row) => ({
           instanceId: row.item.instanceId,
           grade: readGrade(row.grade),
-          // An ungraded sleeve is treated like a generic one.
-          sleeveGrade: readGrade(row.sleeve) ?? null,
+          sleeveGrade: readGrade(row.sleeve),
         })),
       };
       const parsed = collectionImportSchema.safeParse(body);
       if (missing || !parsed.success) {
         banner.hidden = false;
         banner.textContent = missing
-          ? `Pick a record grade for ${missing === 1 ? 'one record' : `${missing} records`}, or untick ${missing === 1 ? 'it' : 'them'}.`
+          ? `Pick the grades for ${missing === 1 ? 'one record' : `${missing} records`}, or untick ${missing === 1 ? 'it' : 'them'}.`
           : Object.values(fieldErrors(parsed.error))[0];
         return;
       }

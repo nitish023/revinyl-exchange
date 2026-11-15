@@ -12,13 +12,19 @@ import { gradeRankSchema, idSchema } from './orders.js';
 /** The contract says "import up to 100 records from Discogs". */
 export const MAX_IMPORT = 100;
 
-/** Discogs usernames are letters, numbers, dots, dashes and underscores. */
+/**
+ * Discogs usernames are letters, numbers, dots, dashes and underscores. They start with a
+ * letter or number, which also keeps "." and ".." (path tricks in our Discogs URLs) out.
+ */
 export const discogsUsernameSchema = z
   .string({ error: 'Enter your Discogs username' })
   .trim()
   .min(1, 'Enter your Discogs username')
   .max(64, 'That username is too long for Discogs')
-  .regex(/^[A-Za-z0-9._-]+$/, 'Discogs usernames only have letters, numbers, dots, dashes and _');
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
+    'Discogs usernames start with a letter or number, then letters, numbers, dots, dashes and _',
+  );
 
 /** GET /api/collection/discogs?username= */
 export const collectionPreviewQuerySchema = z.object({ username: discogsUsernameSchema });

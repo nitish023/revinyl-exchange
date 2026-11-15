@@ -1533,6 +1533,39 @@ select.input {
 .record-status--moving {
   font-weight: 800;
 }
+.shelf-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* Long notes stay on the card as three lines. */
+.shelf-notes {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  font-style: italic;
+}
+.shelf-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+/* Seller photos print in black and white like the covers, and come into color on hover. */
+.shelf-photos img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid var(--ink);
+  filter: grayscale(1);
+}
+.shelf-photos img:hover {
+  filter: none;
+}
 .room-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
@@ -1657,9 +1690,6 @@ select.input {
   align-items: center;
   padding: 14px 0;
   border-bottom: 1px dotted var(--rule-dotted);
-}
-.import-row--done {
-  opacity: 0.6;
 }
 .import-row .cover {
   width: 100%;
