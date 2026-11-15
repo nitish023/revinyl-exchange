@@ -5,6 +5,7 @@
 import { CatalogService } from './catalog/catalogService.js';
 import { DiscogsClient } from './catalog/discogsClient.js';
 import { RateWindow } from './catalog/rateWindow.js';
+import { CollectionImport } from './collection/importService.js';
 import { createPool } from './db/pool.js';
 import { sessionFromCookie } from './auth/sessions.js';
 import { MarketHub } from './market/hub.js';
@@ -19,6 +20,7 @@ import { OrderService } from './orders/orderService.js';
  * @property {import('./market/live.js').LiveUpdates} live tells browsers what changed. Here it's
  *   the WebSocket hub; index.js attaches it to the HTTP server.
  * @property {OrderService} orders places and cancels orders, and keeps each pressing's book
+ * @property {CollectionImport} collection previews and imports Discogs collections
  */
 
 /** @param {import('./config.js').Config} config @returns {AppContext} */
@@ -45,5 +47,12 @@ export function createContext(config) {
     authenticate: sessionFromCookie(pool),
     trustProxy: config.isProduction,
   });
-  return { config, pool, catalog, live, orders: new OrderService({ pool, catalog, live }) };
+  return {
+    config,
+    pool,
+    catalog,
+    live,
+    orders: new OrderService({ pool, catalog, live }),
+    collection: new CollectionImport({ pool, source: discogs }),
+  };
 }

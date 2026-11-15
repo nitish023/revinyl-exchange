@@ -1,0 +1,117 @@
+{
+  "_note": "Hand-written in the shape of the Discogs API docs example for GET /users/{username}/collection/folders/0/releases, for tests. Release 249504 matches release-249504.json.",
+  "pagination": { "per_page": 100, "items": 5, "page": 1, "urls": {}, "pages": 1 },
+  "releases": [
+    {
+      "id": 249504,
+      "instance_id": 900001,
+      "folder_id": 1,
+      "rating": 4,
+      "date_added": "2026-10-30T10:54:13-08:00",
+      "basic_information": {
+        "id": 249504,
+        "title": "Never Gonna Give You Up",
+        "year": 1987,
+        "thumb": "https://i.discogs.com/fixture/R-249504-thumb.jpg",
+        "cover_image": "https://i.discogs.com/fixture/R-249504-cover.jpg",
+        "formats": [{ "name": "Vinyl", "qty": "1", "descriptions": ["7\"", "45 RPM", "Single"] }],
+        "labels": [{ "name": "RCA", "catno": "PB 41447", "id": 895 }],
+        "artists": [{ "name": "Rick Astley", "anv": "", "join": "", "id": 72872 }],
+        "genres": ["Electronic", "Pop"],
+        "styles": ["Synth-pop"]
+      },
+      "notes": [
+        { "field_id": 1, "value": "Very Good Plus (VG+)" },
+        { "field_id": 2, "value": "Very Good (VG)" },
+        { "field_id": 3, "value": "Found at a church sale." }
+      ]
+    },
+    {
+      "id": 1000001,
+      "instance_id": 900002,
+      "folder_id": 1,
+      "rating": 0,
+      "date_added": "2026-10-20T08:11:29-07:00",
+      "basic_information": {
+        "id": 1000001,
+        "title": "Harbor Songs",
+        "year": 1967,
+        "thumb": "https://i.discogs.com/fixture/R-1000001-thumb.jpg",
+        "cover_image": "https://i.discogs.com/fixture/R-1000001-cover.jpg",
+        "formats": [{ "name": "Vinyl", "qty": "1", "descriptions": ["LP", "Album"] }],
+        "labels": [{ "name": "Orbit Records", "catno": "ORB-0001", "id": 1 }],
+        "artists": [
+          { "name": "Pell (2)", "anv": "", "join": "&", "id": 2 },
+          { "name": "Ruiz", "anv": "", "join": "", "id": 3 }
+        ],
+        "genres": ["Jazz"],
+        "styles": ["Cool Jazz"]
+      },
+      "notes": [
+        { "field_id": 1, "value": "Near Mint (NM or M-)" },
+        { "field_id": 2, "value": "Generic" }
+      ]
+    },
+    {
+      "id": 1000002,
+      "instance_id": 900003,
+      "folder_id": 1,
+      "rating": 0,
+      "date_added": "2026-10-10T08:11:35-07:00",
+      "basic_information": {
+        "id": 1000002,
+        "title": "Night Ferry",
+        "year": 1979,
+        "thumb": "",
+        "cover_image": "",
+        "formats": [{ "name": "Vinyl", "qty": "2", "descriptions": ["LP", "Album", "Gatefold"] }],
+        "labels": [{ "name": "Orbit Records", "catno": "ORB-1102", "id": 1 }],
+        "artists": [{ "name": "The Lanterns", "anv": "", "join": "", "id": 4 }],
+        "genres": ["Rock"],
+        "styles": []
+      }
+    },
+    {
+      "id": 1000003,
+      "instance_id": 900004,
+      "folder_id": 1,
+      "rating": 0,
+      "date_added": "2026-10-05T08:11:35-07:00",
+      "basic_information": {
+        "id": 1000003,
+        "title": "Harbor Songs",
+        "year": 2004,
+        "thumb": "https://i.discogs.com/fixture/R-1000003-thumb.jpg",
+        "cover_image": "https://i.discogs.com/fixture/R-1000003-cover.jpg",
+        "formats": [{ "name": "CD", "qty": "1", "descriptions": ["Album", "Reissue"] }],
+        "labels": [{ "name": "Orbit Records", "catno": "ORBCD-0001", "id": 1 }],
+        "artists": [{ "name": "Pell & Ruiz", "anv": "", "join": "", "id": 5 }],
+        "genres": ["Jazz"],
+        "styles": []
+      }
+    },
+    {
+      "id": 1000001,
+      "instance_id": 900005,
+      "folder_id": 1,
+      "rating": 0,
+      "date_added": "2026-09-01T08:11:35-07:00",
+      "basic_information": {
+        "id": 1000001,
+        "title": "Harbor Songs",
+        "year": 1967,
+        "thumb": "https://i.discogs.com/fixture/R-1000001-thumb.jpg",
+        "cover_image": "https://i.discogs.com/fixture/R-1000001-cover.jpg",
+        "formats": [{ "name": "Vinyl", "qty": "1", "descriptions": ["LP", "Album"] }],
+        "labels": [{ "name": "Orbit Records", "catno": "ORB-0001", "id": 1 }],
+        "artists": [
+          { "name": "Pell (2)", "anv": "", "join": "&", "id": 2 },
+          { "name": "Ruiz", "anv": "", "join": "", "id": 3 }
+        ],
+        "genres": ["Jazz"],
+        "styles": []
+      },
+      "notes": [{ "field_id": 1, "value": "Not Graded" }]
+    }
+  ]
+}

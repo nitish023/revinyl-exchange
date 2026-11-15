@@ -98,4 +98,13 @@ export const api = {
   },
   placeOrder: (input) => request('POST', '/orders', { body: input }),
   cancelOrder: (orderId) => request('DELETE', `/orders/${orderId}`),
+
+  room: (signal) => request('GET', '/room', signal ? { signal } : {}),
+  collectionPreview: (username, signal) =>
+    request(
+      'GET',
+      `/collection/discogs?${new URLSearchParams({ username })}`,
+      signal ? { signal } : {},
+    ),
+  importCollection: (input) => request('POST', '/collection/discogs', { body: input }),
 };

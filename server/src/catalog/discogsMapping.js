@@ -1,3 +1,5 @@
+import { gradeFromDiscogs } from '../../../shared/collection.js';
+
 /**
  * Turns raw Discogs JSON into our DTOs. Pure functions, so they're easy to test
  * against real responses saved in ./fixtures. Discogs data is user-contributed
@@ -181,4 +183,81 @@ export function mapRelease(raw) {
 /** True when the release has at least one vinyl format; we only trade vinyl. */
 export function isVinyl(release) {
   return release.formats.some((format) => format.toLowerCase() === 'vinyl');
+}
+
+/**
+ * Which of a collection's note fields hold the media and sleeve condition. Discogs lets
+ * people rename and reorder fields, so they're found by name ("Media Condition",
+ * "Sleeve Condition" by default), and only dropdowns count.
+ * @returns {{ media: number | null, sleeve: number | null }}
+ */
+export function conditionFieldIds(raw) {
+  const dropdowns = objects(isObject(raw) ? raw.fields : null).filter(
+    (field) => field.type === 'dropdown' && positiveId(field.id) !== null,
+  );
+  const named = (pattern) => dropdowns.find((field) => pattern.test(text(field.name) ?? ''))?.id;
+  return { media: named(/media/i) ?? null, sleeve: named(/sleeve/i) ?? null };
+}
+
+/**
+ * One item of a Discogs collection. A collection only carries the release's basic
+ * information (no tracklist), which is enough for the import list and a first copy of the
+ * pressing page; the full release is fetched the first time someone opens that page.
+ * @param {unknown} raw
+ * @param {{ media: number | null, sleeve: number | null }} fieldIds
+ */
+export function mapCollectionItem(raw, fieldIds) {
+  if (!isObject(raw) || !isObject(raw.basic_information)) return null;
+  const info = raw.basic_information;
+  const id = positiveId(info.id);
+  const instanceId = positiveId(raw.instance_id);
+  if (id === null || instanceId === null) return null;
+  const label = objects(info.labels)[0];
+  const catno = label ? text(label.catno) : null;
+  const notes = objects(raw.notes);
+  const note = (fieldId) =>
+    fieldId === null ? undefined : notes.find((entry) => entry.field_id === fieldId)?.value;
+  const grade = gradeFromDiscogs(note(fieldIds.media));
+  const sleeve = gradeFromDiscogs(note(fieldIds.sleeve));
+  const release = {
+    id,
+    title: text(info.title) ?? 'Untitled',
+    artist: artistCredit(info.artists),
+    year: parseYear(info.year),
+    released: null,
+    country: null,
+    label: label && text(label.name) ? cleanArtistName(text(label.name)) : null,
+    catno: catno && catno.toLowerCase() !== 'none' ? catno : null,
+    formats: formatList(info.formats),
+    genres: textList(info.genres),
+    styles: textList(info.styles),
+    tracklist: [],
+    coverUrl: imageUrl(info.cover_image),
+    thumbUrl: imageUrl(info.thumb) ?? imageUrl(info.cover_image),
+    discogsUrl: `${DISCOGS_SITE}/release/${id}`,
+  };
+  return {
+    instanceId,
+    addedAt: text(raw.date_added),
+    release,
+    // A media grade of null can't happen (only sleeves are "Generic"), so null means "not graded".
+    grade: typeof grade === 'number' ? grade : null,
+    // A number, 'generic' for a generic or missing sleeve, or null when it isn't graded.
+    sleeveGrade: sleeve === null ? 'generic' : (sleeve ?? null),
+  };
+}
+
+/** One page of GET /users/:username/collection/folders/0/releases. */
+export function mapCollectionPage(raw, fieldIds) {
+  const body = isObject(raw) ? raw : {};
+  const pagination = isObject(body.pagination) ? body.pagination : {};
+  const items = objects(body.releases)
+    .map((item) => mapCollectionItem(item, fieldIds))
+    .filter((item) => item !== null);
+  return {
+    items,
+    page: typeof pagination.page === 'number' ? pagination.page : 1,
+    pages: typeof pagination.pages === 'number' ? pagination.pages : 1,
+    total: typeof pagination.items === 'number' ? pagination.items : items.length,
+  };
 }

@@ -24,7 +24,7 @@ function accountLinks(user) {
     }
   });
   return [
-    h('a', { href: '/crate' }, 'Your Crate'),
+    h('a', { href: '/room' }, 'Listening Room'),
     h('span', { class: 'masthead-user' }, user.displayName),
     logout,
   ];
