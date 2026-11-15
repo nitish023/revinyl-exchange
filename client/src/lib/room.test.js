@@ -176,7 +176,7 @@ describe('ledger', () => {
     expect(ledgerRow(trade({ role: 'seller', status: 'awaiting_shipment' }))).toMatchObject({
       side: 'sold',
       amount: '+$31.00',
-      status: 'Ship it',
+      status: 'To ship',
       pending: true,
     });
   });
