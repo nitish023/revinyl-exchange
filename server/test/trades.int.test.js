@@ -352,6 +352,45 @@ describe('the trade', () => {
     await buyer.post('/api/orders', { side: 'ask', copyId: copy.id, price: '55' }).expect(201);
   });
 
+  it('a completed trade drops the copy’s Discogs instance id, even if the buyer imported the same one', async () => {
+    const seller = await signUp('seller');
+    const buyer = await signUp('buyer');
+    const { trade, copy } = await shippedTrade(seller, buyer, '40.00');
+    // Both imported the same public Discogs collection, so they share an instance id.
+    const theirs = await addCopy(buyer);
+    const markImported = (id) =>
+      query(
+        `UPDATE copies SET source = 'discogs_import', discogs_instance_id = 777 WHERE id = $1`,
+        [id],
+      );
+    await markImported(copy.id);
+    await markImported(theirs.id);
+
+    await step(buyer, trade.id, 'received').expect(200);
+
+    const ids = await query('SELECT id, discogs_instance_id FROM copies ORDER BY id');
+    expect(ids).toEqual([
+      { id: copy.id, discogs_instance_id: null },
+      { id: theirs.id, discogs_instance_id: 777 },
+    ]);
+  });
+
+  it('a refunded copy keeps its Discogs instance id: it never left its owner', async () => {
+    const seller = await signUp('seller');
+    const buyer = await signUp('buyer');
+    const { trade, copy } = await shippedTrade(seller, buyer, '40.00');
+    await query(
+      `UPDATE copies SET source = 'discogs_import', discogs_instance_id = 777 WHERE id = $1`,
+      [copy.id],
+    );
+
+    await step(buyer, trade.id, 'refund').expect(200);
+
+    expect(
+      await query('SELECT discogs_instance_id FROM copies WHERE id = $1', [copy.id]),
+    ).toEqual([{ discogs_instance_id: 777 }]);
+  });
+
   it('buyer says not as described after shipping: refunded, the buyer is repaid, the copy goes back', async () => {
     const seller = await signUp('seller');
     const buyer = await signUp('buyer');

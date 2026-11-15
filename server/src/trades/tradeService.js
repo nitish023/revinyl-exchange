@@ -164,8 +164,12 @@ export class TradeService {
           row[`${step.paid}_id`],
           row.price_cents,
         ]);
+        // A copy changing hands drops its Discogs instance id: that belonged to the old
+        // owner's collection, and the buyer may have imported the same one (PROJECT.md).
         const { rowCount } = await client.query(
-          `UPDATE copies SET status = 'in_crate', owner_id = $2
+          `UPDATE copies
+              SET status = 'in_crate', owner_id = $2,
+                  discogs_instance_id = CASE WHEN owner_id = $2 THEN discogs_instance_id END
             WHERE id = $1 AND status = 'in_trade'`,
           [row.copy_id, row[`${step.owner}_id`]],
         );
