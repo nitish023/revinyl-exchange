@@ -90,12 +90,14 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | POST   | `/api/orders` `{ side: 'bid', releaseId, price, minGrade, note }` or `{ side: 'ask', copyId, price }` | user   | 3    |
 | DELETE | `/api/orders/:id`                                                                                     | user   | 3    |
 | GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)                                           | anyone | 4    |
+| POST   | `/api/orders/:id/buy` (Buy this copy: price and grade come from the ad)                               | user   | 5    |
+| POST   | `/api/orders/:id/sell` `{ copyId }` (Sell to them: one of your copies, at the ad's price)             | user   | 5    |
+| GET    | `/api/trades?status=awaiting_shipment\|shipped\|completed\|refunded`                                  | user   | 5    |
+| POST   | `/api/trades/:id/ship` or `/cancel` (seller), `/received` or `/refund` (buyer)                        | user   | 5    |
 | GET    | `/api/room` (your Listening Room: wallet, shelf, wanted ads, ledger, counter, value)                  | user   | 6    |
 | GET    | `/api/collection/discogs?username=` (preview a public Discogs collection)                             | user   | 6    |
 | POST   | `/api/collection/discogs` `{ username, items: [{ instanceId, grade, sleeveGrade }] }`                 | user   | 6    |
 | WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                             | anyone | 4    |
-
-Planned: buy and sell-to routes and trade states (Part 5, see `docs/parts/part-5-trades.md`).
 
 ## Build plan
 
@@ -107,7 +109,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | 7    | 2   | Nitish   | Repo setup, login and sign up, Discogs catalog, newspaper design and page shell, Neon    | ✅ done |
 | 8    | 3   | Sauransh | Crate, listings and wanted ads, held cash ($2,000 start, seller notes, cancel)           | ✅ done |
 | 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ✅ done |
-| 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ☐       |
+| 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ✅ done |
 | 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ✅ done |
 | 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ☐       |
 | 10   | 8   | Nitish   | Demo bots, the front page (lead record, First Shelf) and the reVINYL 30 chart            | ☐       |

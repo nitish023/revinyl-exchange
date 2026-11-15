@@ -106,4 +106,12 @@ git checkout -b sauransh/part-5-trades
   `marketChanged` when a trade settles (completed or refunded).
 - **Limits:** trade steps are limited to 30 a minute per visitor; `GET /api/trades` returns the newest 200.
 - **Browser:** `api.buy(askId)`, `api.sellTo(bidId, copyId)`, `api.trades({ status })` and
-  `api.tradeStep(tradeId, step)` in `client/src/lib/api.js`.
+  `api.tradeStep(tradeId, step)` in `client/src/lib/api.js`. Every button is Part 6's `actionButton`: Buy, Sell,
+  Cancel sale, It arrived and Not as described need a second press that names the money; Ship it doesn't. A 409
+  (someone else acted first) reloads the page with the server's message.
+- **Sell to them** reads your crate only when pressed, and lists the copies that fit (in the crate or listed, at the
+  ad's lowest grade or better). A listed copy shows its asking price.
+- **Discogs instance id:** a completed trade sets the copy's `discogs_instance_id` to NULL (see PROJECT.md,
+  "Imported copies"); a refunded copy keeps it.
+- **Small changes to Part 6:** the ledger says "To ship" instead of "Ship it" (the button says that now), and "Your ads
+  on this pressing" uses `actionButton` for Cancel.
