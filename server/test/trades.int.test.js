@@ -4,9 +4,9 @@
  * (RecordingLiveUpdates in helpers.js).
  */
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
-import { createTestContext, resetDatabase } from './helpers.js';
+import { createTestContext, expectExchangeConsistent, resetDatabase } from './helpers.js';
 import { NM, RELEASE, traders, VG, VG_PLUS } from './traders.js';
 
 const ctx = createTestContext();
@@ -21,6 +21,8 @@ beforeEach(async () => {
   ctx.orders.books.clear();
   clearAnnouncements();
 });
+// Part 7: every test must leave the exchange adding up, books and database alike.
+afterEach(() => expectExchangeConsistent(ctx));
 afterAll(() => ctx.pool.end());
 
 function clearAnnouncements() {

@@ -4,7 +4,7 @@
  * the same LP among them) and a CD. "shy" keeps theirs private.
  */
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MAX_COPIES_PER_USER, MAX_IMPORT } from '../../shared/index.js';
 import { createApp } from '../src/app.js';
 import {
@@ -12,7 +12,7 @@ import {
   CollectionImport,
   MAX_PAGES,
 } from '../src/collection/importService.js';
-import { createTestContext, resetDatabase } from './helpers.js';
+import { createTestContext, expectExchangeConsistent, resetDatabase } from './helpers.js';
 
 const ctx = createTestContext();
 const app = createApp(ctx, { rateLimit: false });
@@ -25,6 +25,8 @@ beforeEach(async () => {
   ctx.catalogSource.failWith = null;
   ctx.collection.clearPreviews();
 });
+// Part 7: every test must leave the exchange adding up, books and database alike.
+afterEach(() => expectExchangeConsistent(ctx));
 afterAll(() => ctx.pool.end());
 
 const query = async (sql, params) => (await ctx.pool.query(sql, params)).rows;
