@@ -11,7 +11,7 @@ import { sessionFromCookie, sessionIdFor } from '../src/auth/sessions.js';
 import { DEMO_PASSWORD, FIXTURE_RELEASE_ID, seedDemo } from '../src/db/seed.js';
 import { MarketHub } from '../src/market/hub.js';
 import { loadMarket } from '../src/market/marketRepo.js';
-import { createTestContext, resetDatabase } from './helpers.js';
+import { createTestContext, expectExchangeConsistent, resetDatabase } from './helpers.js';
 
 const ctx = createTestContext();
 const app = createApp(ctx, { rateLimit: false });
@@ -20,6 +20,8 @@ beforeEach(async () => {
   await resetDatabase(ctx.pool);
   await seedDemo(ctx.pool);
 });
+// Part 7: every test must leave the exchange adding up, books and database alike.
+afterEach(() => expectExchangeConsistent(ctx));
 afterAll(() => ctx.pool.end());
 
 const marketPath = `/api/releases/${FIXTURE_RELEASE_ID}/market`;
@@ -150,10 +152,13 @@ describe('live updates from the database', () => {
     const { body } = await request(app).get(marketPath);
     expect(first.market.forSale).toEqual(body.market.forSale);
 
-    // Someone cancels the cheapest copy (Part 3 will do this through OrderService).
+    // Someone cancels the cheapest copy, as OrderService does: the ad closes and the copy
+    // goes back to the crate.
     const cheapest = first.market.forSale.at(-1).ads[0];
     await ctx.pool.query(
-      `UPDATE orders SET status = 'cancelled', closed_at = now() WHERE id = $1`,
+      `WITH cancelled AS (
+         UPDATE orders SET status = 'cancelled', closed_at = now() WHERE id = $1 RETURNING copy_id)
+       UPDATE copies SET status = 'in_crate' WHERE id IN (SELECT copy_id FROM cancelled)`,
       [cheapest.orderId],
     );
     hub.marketChanged(FIXTURE_RELEASE_ID);

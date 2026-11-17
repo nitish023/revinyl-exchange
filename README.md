@@ -27,7 +27,7 @@ npm run db:seed          # demo traders and market activity (password: password1
 npm run dev              # API on :3000, site on http://localhost:5173
 ```
 
-The server creates and updates the database tables on start.
+The server creates and updates the database tables on start, checks they add up, and rebuilds the order books.
 
 ## Tests and checks
 
@@ -37,6 +37,7 @@ npm run test:integration # the API against the test database (needs db:up)
 npm run test:all         # both
 npm run lint
 npm run format
+npm run db:check         # check the dev database still adds up (money, holds, copies, trades)
 ```
 
 ## Production

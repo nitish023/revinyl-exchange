@@ -3,11 +3,11 @@
  * Each test starts from an empty database and an empty set of order books.
  */
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_COPIES_PER_USER, MAX_PHOTO_BYTES, STARTING_CASH_CENTS } from '../../shared/index.js';
 import { createApp } from '../src/app.js';
 import { seedDemo } from '../src/db/seed.js';
-import { createTestContext, resetDatabase } from './helpers.js';
+import { createTestContext, expectExchangeConsistent, resetDatabase } from './helpers.js';
 import { NM, RELEASE, traders, VG, VG_PLUS } from './traders.js';
 
 const ctx = createTestContext();
@@ -27,12 +27,12 @@ beforeEach(async () => {
   ctx.live.markets.length = 0;
   ctx.live.messages.length = 0;
 });
+// Part 7: every test must leave the exchange adding up, books and database alike.
+afterEach(() => expectExchangeConsistent(ctx));
 afterAll(() => ctx.pool.end());
 
-const { query, signUp, addCopy, listCopy, placeBid, walletOf, copyStatus, hookQueries } = traders(
-  ctx,
-  app,
-);
+const { query, signUp, addCopy, listCopy, placeBid, walletOf, setCash, copyStatus, hookQueries } =
+  traders(ctx, app);
 
 describe('wallet', () => {
   it('a new account starts with $2,000 and nothing held', async () => {
@@ -338,7 +338,7 @@ describe('placing a wanted ad (bid)', () => {
 
   it('refuses with INSUFFICIENT_FUNDS when spendable cash is too low, and holds nothing', async () => {
     const alice = await signUp('alice');
-    await query('UPDATE users SET cash_cents = 5000 WHERE id = $1', [alice.id]);
+    await setCash(alice, 5000);
     await placeBid(alice, '30').expect(201); // $20 left to spend
 
     const response = await placeBid(alice, '25').expect(400);
@@ -352,7 +352,7 @@ describe('placing a wanted ad (bid)', () => {
 
   it('accepts a bid for exactly the cash there is to spend', async () => {
     const alice = await signUp('alice');
-    await query('UPDATE users SET cash_cents = 4000 WHERE id = $1', [alice.id]);
+    await setCash(alice, 4000);
 
     await placeBid(alice, '40').expect(201);
 
@@ -703,7 +703,7 @@ describe('keeping the book and the database in step', () => {
 
   it('the same cash can’t back two bids on different pressings at the same moment', async () => {
     const alice = await signUp('alice');
-    await query('UPDATE users SET cash_cents = 5000 WHERE id = $1', [alice.id]);
+    await setCash(alice, 5000);
     await addCopy(alice); // caches the fixture pressing
     const OTHER = 1234;
     await query(

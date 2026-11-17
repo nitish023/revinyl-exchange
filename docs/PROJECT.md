@@ -19,6 +19,10 @@ Read this before you start a part. If a rule needs to change, change it here in 
   leave out `removed_at IS NOT NULL` copies anywhere you list a user's records.
 - **Orders go through `ctx.orders`** (`server/src/orders/orderService.js`): never write `orders`, held cash or a
   copy's status from anywhere else, or the in-memory book stops matching the database.
+- **Exchange rules** (Part 7): `server/src/orders/exchangeRules.js` lists what must always hold (money is never made
+  or lost, held cash = open WANTED ads, a `listed` copy has one open FOR SALE ad, and more). The server checks them on
+  start, every market test checks them afterwards (`expectExchangeConsistent`), and `npm run db:check` checks any
+  database. A test or script that writes market tables with SQL must keep them too.
 - **Imported copies:** `copies.discogs_instance_id` ties an imported copy to its owner's Discogs collection, and only
   one active copy per owner may have each instance id (migration 005). Whenever a copy changes owner (a trade
   completes, Part 5), set `discogs_instance_id` to NULL in the same update: it belonged to the old owner's collection.

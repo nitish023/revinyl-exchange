@@ -1,7 +1,7 @@
 /**
  * Helpers for the market tests (orders.int.test.js, trades.int.test.js): sign traders up,
- * add and list copies, place bids, read wallets, and make database queries fail or slow
- * down on purpose.
+ * add and list copies, place bids, read and set wallets, and make database queries fail or
+ * slow down on purpose.
  */
 import request from 'supertest';
 import { vi } from 'vitest';
@@ -65,6 +65,26 @@ export function traders(ctx, app) {
     return (await user.get('/api/wallet').expect(200)).body.wallet;
   }
 
+  /**
+   * Leave a trader with exactly `cents` in cash. The difference goes to (or comes from) a
+   * trader the test never uses, because money is never made or lost: the rules checked
+   * after every test (expectExchangeConsistent) would catch it.
+   */
+  async function setCash(user, cents) {
+    await query(
+      `INSERT INTO users (email, display_name, password_hash)
+       VALUES ('elsewhere@example.com', 'elsewhere', 'not-a-login')
+       ON CONFLICT DO NOTHING`,
+    );
+    await query(
+      `UPDATE users SET cash_cents = cash_cents
+                        + (SELECT cash_cents - $2 FROM users WHERE id = $1)
+        WHERE email = 'elsewhere@example.com'`,
+      [user.id, cents],
+    );
+    await query('UPDATE users SET cash_cents = $2 WHERE id = $1', [user.id, cents]);
+  }
+
   async function copyStatus(copyId) {
     return (await query('SELECT status FROM copies WHERE id = $1', [copyId]))[0].status;
   }
@@ -99,5 +119,15 @@ export function traders(ctx, app) {
     });
   }
 
-  return { query, signUp, addCopy, listCopy, placeBid, walletOf, copyStatus, hookQueries };
+  return {
+    query,
+    signUp,
+    addCopy,
+    listCopy,
+    placeBid,
+    walletOf,
+    setCash,
+    copyStatus,
+    hookQueries,
+  };
 }
