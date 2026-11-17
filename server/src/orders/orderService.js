@@ -96,14 +96,43 @@ export class OrderService {
     let loading = this.#loading.get(releaseId);
     if (!loading) {
       loading = (async () => {
-        const book = new OrderBook(releaseId);
-        for (const order of await loadOpenOrders(this.pool, releaseId)) book.add(order);
+        const orders = (await loadOpenOrders(this.pool, releaseId)).get(releaseId) ?? [];
+        const book = buildBook(releaseId, orders);
         this.books.set(releaseId, book);
         return book;
       })().finally(() => this.#loading.delete(releaseId));
       this.#loading.set(releaseId, loading);
     }
     return loading;
+  }
+
+  /**
+   * Restart recovery (Part 7): rebuild every pressing's book from the open orders in the
+   * database. Call it once at startup, before the server takes requests. The books only
+   * ever hold what the database says is open, so nothing is lost by a restart or a crash:
+   * a transaction that was cut off never committed, and the database rolled it back.
+   *
+   * A pressing whose orders the engine refuses (two FOR SALE ads for one copy, say: only a
+   * bug could save that) is logged and left out. Its next order then tries to load it again
+   * and fails the same way, so that pressing stops trading instead of trading on bad data,
+   * and every other pressing carries on.
+   * @returns {Promise<{ books: number, orders: number, failed: number[] }>}
+   */
+  async recover() {
+    const byRelease = await loadOpenOrders(this.pool);
+    this.books.clear();
+    const summary = { books: 0, orders: 0, failed: [] };
+    for (const [releaseId, orders] of byRelease) {
+      try {
+        this.books.set(releaseId, buildBook(releaseId, orders));
+        summary.books += 1;
+        summary.orders += orders.length;
+      } catch (error) {
+        console.error(`[orders] couldn't rebuild the book for ${releaseId}:`, error.message);
+        summary.failed.push(releaseId);
+      }
+    }
+    return summary;
   }
 
   /**
@@ -396,6 +425,13 @@ export class OrderService {
       console.error('[orders] live update failed:', error);
     }
   }
+}
+
+/** A pressing's book holding these resting orders. Throws if the engine refuses one. */
+function buildBook(releaseId, orders) {
+  const book = new OrderBook(releaseId);
+  for (const order of orders) book.add(order);
+  return book;
 }
 
 /** Lock the buyer's wallet, check they can cover the bid, and insert it. */
