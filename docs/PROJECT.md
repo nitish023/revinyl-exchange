@@ -117,7 +117,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ✅ done |
 | 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ✅ done |
 | 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ✅ done |
-| 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ☐       |
+| 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ✅ done |
 | 10   | 8   | Nitish   | Demo bots, the front page (lead record, First Shelf) and the reVINYL 30 chart            | ☐       |
 | 11   | 9   | Sauransh | Security pass and accessibility pass (stretch: mutation testing)                         | ☐       |
 | 11   | 10  | Nitish   | Production deploy, phone layouts, README setup, demo accounts and demo script            | ☐       |

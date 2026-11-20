@@ -70,11 +70,31 @@ which only grows. The book a restarted server builds is the same book the old on
   `OrderService` does (the copy goes back to the crate). Planting a bug in `OrderService` (a cancel that leaves the
   copy listed, a filled order left in the book) fails 20 tests.
 
-## Next: concurrency and property-based tests
+## As built (several processes, concurrency and property-based tests)
 
-- **Engine properties** (unit, fast-check, many runs): after any sequence of orders and cancels, the book is never
-  crossed; every trade is at the resting order's price, with the best eligible order by price, then time, then id; no
-  self-trades; a targeted order never rests.
-- **API properties** (integration, fewer runs): random mixes of orders, buys, sells, cancels and trade steps from a few
-  traders, many at once, then `expectExchangeConsistent`. Money is never made or lost and no copy is in two trades,
-  whatever the timing.
+- **Several server processes on one database** (migration 007, `OrderService`). Every order transaction takes
+  `pg_advisory_xact_lock(release_id)` first, so processes take turns on a pressing just as requests in one process do
+  (the in-process queue stays, so waiting requests don't hold database connections). It then reads the pressing's
+  `book_versions` row: if this process's book is at an older version, another process changed the orders, and the
+  book is reloaded under the lock before matching. The transaction bumps the version. `isCurrent(releaseId)` says
+  whether a process's book is at the database's version.
+- **The matching engine against a reference model** (`server/src/market/orderBook.property.test.js`, fast-check).
+  1,500 random sequences of up to 60 orders, cancels and targeted orders, from 4 traders with few prices and grades
+  so orders collide, tie and self-match often. After every step the book must equal a plain list kept by a separately
+  written, obvious matcher: same trade, at the resting price, with the best eligible order (price, then time, then
+  id); `match()` changes nothing; the book is never crossed; one ask per copy; targeted orders never rest. A second
+  property: a book rebuilt with `add()` (restart) equals the live one. Planting a tie-break bug fails it with a
+  shrunk two-order counterexample.
+- **Concurrency against the real database** (`server/test/stress.int.test.js`), with two order services on two
+  connection pools, like two processes:
+  - a process whose book is behind reloads it and fills a WANTED ad it had never seen (fails without the version check);
+  - fifteen buyers across both processes press Buy on one copy: exactly one trade, the rest `TARGET_UNAVAILABLE`;
+  - every seller answers one WANTED ad at once: one sale, and the buyer's hold goes back to $0;
+  - **random flow** (fast-check, 25 runs): up to 12 batches of up to 10 actions (bid, list, buy, sell to them, cancel,
+    ship, accept, refund, cancel sale, and steps by the wrong person), each batch all at once across both processes.
+    Only refusals (4xx) are allowed, and afterwards the rules hold and every current book equals the database.
+- **The deadlock it found** (fixed): a purchase locked the buyer's wallet `FOR UPDATE` and then saved a trade, whose
+  foreign key check needs a KEY SHARE lock on the seller's users row, while the seller's trade step held that row and
+  waited for the buyer's wallet. Every row lock is now `FOR NO KEY UPDATE`, which still lets one transaction at a time
+  change a wallet but lets foreign key checks through (rule added to `docs/PROJECT.md`). `deadlocks` in the stress
+  tests reproduces it on demand: it fails with the old locks.
