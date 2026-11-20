@@ -11,6 +11,7 @@
 import { formatCents, gradeByRank } from '../../../shared/index.js';
 import { fitFairValue, HALF_LIFE_DAYS, pooledGradeStep } from './fairValue.js';
 import { dailyCandles, depthByGrade, priceStats } from './history.js';
+import { findWashTrades, withoutWashTrades } from './surveillance.js';
 import { fitSaleOdds } from './saleOdds.js';
 
 /** Sales older than this say nothing useful about today's prices (weight < 0.02%). */
@@ -20,10 +21,15 @@ const DAY_MS = 86_400_000;
 /** An ad that filled the moment it was placed still counts, as a sale after a minute. */
 const MIN_DAYS_UP = 1 / 1440;
 
-/** Every sale in the window that wasn't refunded, by pressing. */
-async function loadSales(db, now, releaseId = null) {
+/**
+ * Every sale in the window that wasn't refunded, by pressing. Part 17: by default, without
+ * the trades that look like wash trading (surveillance.js), so no price or model is built
+ * from them; `{ clean: false }` keeps them, for the integrity report.
+ */
+async function loadSales(db, now, releaseId = null, { clean = true } = {}) {
   const { rows } = await db.query(
-    `SELECT id, release_id, grade, price_cents, created_at FROM trades
+    `SELECT id, release_id, copy_id, buyer_id, seller_id, grade, price_cents, created_at
+       FROM trades
       WHERE status <> 'refunded' AND created_at > $1
         AND ($2::bigint IS NULL OR release_id = $2)
       ORDER BY id`,
@@ -34,11 +40,17 @@ async function loadSales(db, now, releaseId = null) {
     const sales = byRelease.get(row.release_id) ?? [];
     sales.push({
       id: row.id,
+      copyId: row.copy_id,
+      buyerId: row.buyer_id,
+      sellerId: row.seller_id,
       grade: row.grade,
       priceCents: row.price_cents,
       at: row.created_at.getTime(),
     });
     byRelease.set(row.release_id, sales);
+  }
+  if (clean) {
+    for (const [id, sales] of byRelease) byRelease.set(id, withoutWashTrades(sales));
   }
   return byRelease;
 }
@@ -100,6 +112,38 @@ export class PricingService {
       if (this.#market?.value === value) this.#market = null;
     });
     return value;
+  }
+
+  /**
+   * Part 17: what surveillance set aside for a pressing: trades that look like wash trading
+   * (with why), and sales the fair value fit found too far from the rest (outliers). People
+   * are never named, as everywhere on the site.
+   * @param {number} releaseId
+   */
+  async integrity(releaseId) {
+    const now = this.now();
+    const [{ gradeStep }, all] = await Promise.all([
+      this.#learnFromMarket(),
+      loadSales(this.pool, now, releaseId, { clean: false }),
+    ]);
+    const sales = all.get(releaseId) ?? [];
+    const flags = findWashTrades(sales);
+    const clean = sales.filter((sale) => !flags.has(sale.id));
+    const fair = fitFairValue(clean, { now, priorStep: gradeStep });
+    const describe = (sale) => ({
+      tradeId: sale.id,
+      grade: sale.grade,
+      code: gradeByRank(sale.grade).code,
+      price: formatCents(sale.priceCents),
+      at: new Date(sale.at).toISOString(),
+    });
+    return {
+      checked: sales.length,
+      washTrades: sales
+        .filter((sale) => flags.has(sale.id))
+        .map((sale) => ({ ...describe(sale), reasons: [...flags.get(sale.id)].sort() })),
+      outliers: (fair?.outliers ?? []).map(describe),
+    };
   }
 
   /**
