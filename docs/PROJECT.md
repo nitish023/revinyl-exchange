@@ -103,6 +103,8 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/room` (your Listening Room: wallet, shelf, wanted ads, ledger, counter, value)                  | user   | 6    |
 | GET    | `/api/collection/discogs?username=` (preview a public Discogs collection)                             | user   | 6    |
 | POST   | `/api/collection/discogs` `{ username, items: [{ instanceId, grade, sleeveGrade }] }`                 | user   | 6    |
+| GET    | `/api/wallet/statement?before=` (your cash, line by line from the ledger, with running balance)       | user   | 11   |
+| GET    | `/api/books` (reVINYL's books: issued, in wallets, in escrow, fees)                                   | anyone | 11   |
 | WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                             | anyone | 4    |
 
 ## Build plan
@@ -121,3 +123,18 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | 10   | 8   | Nitish   | Demo bots, the front page (lead record, First Shelf) and the reVINYL 30 chart            | ☐       |
 | 11   | 9   | Sauransh | Security pass and accessibility pass (stretch: mutation testing)                         | ☐       |
 | 11   | 10  | Nitish   | Production deploy, phone layouts, README setup, demo accounts and demo script            | ☐       |
+
+**The market engine** (added after the professor's week 10 feedback: the final project should go well beyond a
+basic marketplace). Financial ideas from StockX and real exchanges, built on the parts above:
+
+| #   | Owner    | Part                                                                                     | Status  |
+| --- | -------- | ---------------------------------------------------------------------------------------- | ------- |
+| 11  | Sauransh | Double-entry ledger: balanced journals, escrow, statement, reVINYL's books               | ✅ done |
+| 12  | Sauransh | Seller fees by level (rolling 90-day volume), Wilson-score reliability, exact payouts    | ☐       |
+| 13  | Sauransh | Fair value per grade (robust weighted regression), suggested price and chance of selling | ☐       |
+| 14  | Sauransh | Price history (daily candles, volatility, spread) and the depth chart                    | ☐       |
+| 15  | Sauransh | Ads that expire, and automatic repricing rules for sellers                               | ☐       |
+| 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ☐       |
+| 17  | Sauransh | Market surveillance: wash trading and outlier sales, kept out of prices                  | ☐       |
+| 18  | Sauransh | The reVINYL 30 index (volume-weighted, divisor-adjusted) and portfolio profit and loss   | ☐       |
+| 19  | Sauransh | Market-making bots (inventory-aware quotes around fair value) and a market simulation    | ☐       |
