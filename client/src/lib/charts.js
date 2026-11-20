@@ -211,6 +211,7 @@ export function historySummary({ candles, stats }) {
   if (stats.monthlyVolatility !== null) {
     parts.push(`volatility ±${Math.round(stats.monthlyVolatility * 100)}% a month`);
   }
+  if (stats.high30) parts.push(`30-day range $${stats.low30} to $${stats.high30}`);
   parts.push(`52-week range $${stats.low52} to $${stats.high52}`);
   return `${parts.join(' · ')}.`;
 }

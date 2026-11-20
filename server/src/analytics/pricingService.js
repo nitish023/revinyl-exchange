@@ -237,6 +237,8 @@ export class PricingService {
       stats: {
         monthlyVolatility: stats.monthlyVolatility,
         change30: stats.change30,
+        high30: money(stats.high30),
+        low30: money(stats.low30),
         high52: money(stats.high52),
         low52: money(stats.low52),
         lastClose: money(stats.lastClose),

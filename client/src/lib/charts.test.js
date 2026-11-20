@@ -94,12 +94,15 @@ describe('words', () => {
           lastClose: '31.00',
           change30: 0.124,
           monthlyVolatility: 0.183,
+          low30: '31.00',
+          high30: '38.00',
           low52: '30.00',
           high52: '45.00',
         },
       }),
     ).toBe(
-      'Last sale $31.00 in VG+ terms · +12% over 30 days · volatility ±18% a month · 52-week range $30.00 to $45.00.',
+      'Last sale $31.00 in VG+ terms · +12% over 30 days · volatility ±18% a month · ' +
+        '30-day range $31.00 to $38.00 · 52-week range $30.00 to $45.00.',
     );
     expect(historySummary({ candles: [], stats: {} })).toBe('No sales yet, so no price history.');
   });
