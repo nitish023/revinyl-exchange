@@ -1758,6 +1758,36 @@ select.input {
   font-weight: 700;
 }
 
+/* Part 18: the reVINYL 30 on the front page. */
+.front-index {
+  margin-top: var(--space-section);
+}
+.index-level {
+  margin: 12px 0 0;
+  font-family: var(--font-label);
+}
+.index-number {
+  font-family: var(--font-gothic);
+  font-size: 64px;
+  line-height: 1;
+}
+.index-change {
+  font-size: 18px;
+  font-weight: 700;
+}
+.index-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.5;
+}
+.index-dot {
+  fill: var(--ink);
+}
+.index-members td:nth-child(n + 3),
+.index-members th:nth-child(n + 3) {
+  text-align: right;
+}
+
 /* Part 17: market integrity, under the appraisal. */
 .integrity-list {
   margin: 6px 0 0;

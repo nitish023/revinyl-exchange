@@ -138,6 +138,39 @@ export function depthLayout(book, frame = DEPTH_FRAME) {
   };
 }
 
+/** The index chart's frame (Part 18). */
+export const LINE_FRAME = Object.freeze({
+  width: 720,
+  height: 220,
+  left: 8,
+  right: 80,
+  top: 14,
+  bottom: 186,
+});
+
+/**
+ * The reVINYL 30's level as a line, with round ticks.
+ * @param {{ day: string, level: number }[]} series oldest first, at least one point
+ * @returns {{ path: string, ticks: { value: number, y: number }[], last: { x: number, y: number } }}
+ */
+export function lineLayout(series, frame = LINE_FRAME) {
+  const levels = series.map((point) => point.level);
+  const pad = Math.max(5, (Math.max(...levels) - Math.min(...levels)) * 0.1);
+  const lo = Math.min(...levels) - pad;
+  const hi = Math.max(...levels) + pad;
+  const x = scale(0, Math.max(1, series.length - 1), frame.left, frame.width - frame.right);
+  const y = scale(lo, hi, frame.bottom, frame.top);
+  const f = (n) => n.toFixed(1);
+  const path = series
+    .map((point, i) => `${i ? 'L' : 'M'}${f(x(i))},${f(y(point.level))}`)
+    .join(' ');
+  return {
+    path,
+    ticks: niceTicks(lo, hi).map((value) => ({ value, y: y(value) })),
+    last: { x: x(series.length - 1), y: y(levels.at(-1)) },
+  };
+}
+
 /** The grade whose book has the most ads (the best grade on a tie): the one to show first. */
 export function busiestGrade(books) {
   const size = (book) => (book.bids.at(-1)?.copies ?? 0) + (book.asks.at(-1)?.copies ?? 0);
