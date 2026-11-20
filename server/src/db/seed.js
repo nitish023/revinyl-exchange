@@ -15,6 +15,7 @@ import { hashPassword } from '../auth/passwords.js';
 import { mapRelease } from '../catalog/discogsMapping.js';
 import releaseFixture from '../catalog/fixtures/release-249504.json' with { type: 'json' };
 import { upsertRelease } from '../catalog/releasesRepo.js';
+import { postJournal, tradeJournals } from '../ledger/ledger.js';
 import { withTransaction } from './pool.js';
 
 export const DEMO_PASSWORD = 'password123';
@@ -125,15 +126,21 @@ function planFor(releaseId, now) {
   };
 }
 
-async function ensureTraders(client) {
+/** The demo traders joined before their month of sales, so their history reads in order. */
+const MEMBER_FOR_DAYS = 90;
+
+async function ensureTraders(client, now) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
+  const joined = new Date(now - MEMBER_FOR_DAYS * DAY_MS);
   const ids = [];
   for (const name of DEMO_TRADERS) {
+    // A new trader's $2,000 grant is posted by the database (migration 008), dated when
+    // they joined.
     const { rows } = await client.query(
-      `INSERT INTO users (email, display_name, password_hash) VALUES ($1, $2, $3)
+      `INSERT INTO users (email, display_name, password_hash, created_at) VALUES ($1, $2, $3, $4)
        ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
        RETURNING id`,
-      [`${name}@example.com`, name, passwordHash],
+      [`${name}@example.com`, name, passwordHash, joined],
     );
     ids.push(rows[0].id);
   }
@@ -213,20 +220,15 @@ async function seedRelease(client, releaseId, traders, now) {
       status: 'filled',
       at: sale.at,
     });
-    await client.query(
+    const { rows: trades } = await client.query(
       `INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
-                           buyer_id, seller_id, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $9)`,
+                           buyer_id, seller_id, status, created_at, updated_at, shipped_at, settled_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $9, $9, $9) RETURNING *`,
       [releaseId, copyId, sale.grade, sale.price, bidId, askId, buyerId, sellerId, sale.at],
     );
-    await client.query('UPDATE users SET cash_cents = cash_cents - $2 WHERE id = $1', [
-      buyerId,
-      sale.price,
-    ]);
-    await client.query('UPDATE users SET cash_cents = cash_cents + $2 WHERE id = $1', [
-      sellerId,
-      sale.price,
-    ]);
+    // The money moves through the ledger, as a real sale's would: paid in, then paid out.
+    await postJournal(client, { ...tradeJournals.payment(trades[0]), at: sale.at });
+    await postJournal(client, { ...tradeJournals.payout(trades[0]), at: sale.at });
   }
 
   // Copies for sale: listed, with one open ask each.
@@ -291,7 +293,7 @@ export async function seedDemo(pool, { releaseIds = [], now = Date.now(), ensure
     }
   }
   return withTransaction(pool, async (client) => {
-    const traders = await ensureTraders(client);
+    const traders = await ensureTraders(client, now);
     const seeded = [];
     for (const id of ids) if (await seedRelease(client, id, traders, now)) seeded.push(id);
     return seeded;

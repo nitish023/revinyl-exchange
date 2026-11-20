@@ -18,6 +18,7 @@ const app = createApp(ctx, { rateLimit: false });
 
 beforeEach(async () => {
   await resetDatabase(ctx.pool);
+  ctx.orders.books.clear();
   await seedDemo(ctx.pool);
 });
 // Part 7: every test must leave the exchange adding up, books and database alike.
@@ -70,12 +71,24 @@ describe('GET /api/releases/:id/market', () => {
   });
 
   it('leaves refunded trades out of the report', async () => {
-    await ctx.pool.query(
-      `UPDATE trades SET status = 'refunded'
-        WHERE id = (SELECT id FROM trades ORDER BY created_at DESC LIMIT 1)`,
-    );
+    // A real sale that the seller then cancels: the buyer is refunded.
+    const before = (await request(app).get(marketPath).expect(200)).body.market;
+    const ad = before.forSale
+      .flatMap((group) => group.ads)
+      .find((a) => a.seller.name !== 'latenight');
+    const buyer = await logIn('latenight');
+    const { body: bought } = await request(app)
+      .post(`/api/orders/${ad.orderId}/buy`)
+      .set('Cookie', buyer)
+      .expect(201);
+    const seller = await logIn(ad.seller.name);
+    await request(app)
+      .post(`/api/trades/${bought.trade.id}/cancel`)
+      .set('Cookie', seller)
+      .expect(200);
+
     const { body } = await request(app).get(marketPath).expect(200);
-    expect(body.market.report.recentSales).toHaveLength(5);
+    expect(body.market.report.recentSales).toEqual(before.report.recentSales);
   });
 
   it('marks which open orders are mine, only when logged in', async () => {

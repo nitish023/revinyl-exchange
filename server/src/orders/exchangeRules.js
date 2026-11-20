@@ -12,7 +12,7 @@
  * Each check returns the rows that break it, at most MAX_EXAMPLES, as plain sentences.
  */
 import { pathToFileURL } from 'node:url';
-import { formatCents, STARTING_CASH_CENTS } from '../../../shared/index.js';
+import { formatCents } from '../../../shared/index.js';
 
 /** A broken rule can affect thousands of rows; a few examples are enough to find the bug. */
 const MAX_EXAMPLES = 20;
@@ -31,18 +31,96 @@ const UNSETTLED = `('awaiting_shipment', 'shipped')`;
  * @type {Record<string, { sql: string, describe: (row: any) => string }>}
  */
 const RULES = {
-  // Money is only ever moved between people, never made or lost. Everyone starts with
-  // $2,000, and the price of an unsettled trade is in nobody's cash until it settles.
+  // Money is only ever moved, never made or lost: every journal in the ledger adds up to
+  // zero (the database checks each one at COMMIT; this checks the whole history too).
+  ledgerBalanced: {
+    sql: `SELECT j.id, coalesce(sum(e.amount_cents), 0)::bigint AS off_by
+            FROM ledger_journals j LEFT JOIN ledger_entries e ON e.journal_id = j.id
+           GROUP BY j.id
+          HAVING coalesce(sum(e.amount_cents), 0) <> 0 OR count(e.id) < 2
+           ORDER BY j.id LIMIT ${MAX_EXAMPLES}`,
+    describe: (row) =>
+      `Ledger journal ${row.id} doesn't balance (off by ${row.off_by} cents, or has under two entries).`,
+  },
+
+  // All the money there is: everything ever issued (the $2,000 grants, and any correction)
+  // is in someone's wallet, in escrow or in fees. It follows from the ledger rules, and is
+  // checked on its own because it's the one everybody understands.
   money: {
-    sql: `SELECT cash, in_trades, users
-            FROM (SELECT coalesce(sum(cash_cents), 0)::bigint AS cash, count(*) AS users
-                    FROM users) wallets,
-                 (SELECT coalesce(sum(price_cents), 0)::bigint AS in_trades
+    sql: `SELECT issued, cash, escrow, fees
+            FROM (SELECT coalesce(-sum(amount_cents) FILTER (WHERE account = 'issued'), 0)::bigint AS issued,
+                         coalesce(sum(amount_cents) FILTER (WHERE account = 'escrow'), 0)::bigint AS escrow,
+                         coalesce(sum(amount_cents) FILTER (WHERE account = 'fees'), 0)::bigint AS fees
+                    FROM ledger_entries) books,
+                 (SELECT coalesce(sum(cash_cents), 0)::bigint AS cash FROM users) wallets
+           WHERE cash + escrow + fees <> issued`,
+    describe: (row) =>
+      `$${formatCents(row.issued)} has been issued, but wallets hold $${formatCents(row.cash)}, ` +
+      `escrow $${formatCents(row.escrow)} and fees $${formatCents(row.fees)}.`,
+  },
+
+  // Each wallet (users.cash_cents) is exactly its cash entries in the ledger.
+  cashMatchesLedger: {
+    sql: `SELECT id, cash_cents, ledger
+            FROM (SELECT u.id, u.cash_cents,
+                         coalesce((SELECT sum(e.amount_cents) FROM ledger_entries e
+                                    WHERE e.account = 'cash' AND e.user_id = u.id), 0)::bigint AS ledger
+                    FROM users u) wallets
+           WHERE cash_cents <> ledger
+           ORDER BY id LIMIT ${MAX_EXAMPLES}`,
+    describe: (row) =>
+      `User ${row.id} has $${formatCents(row.cash_cents)} in their wallet, but the ledger says $${formatCents(row.ledger)}.`,
+  },
+
+  // Escrow holds exactly the prices of the trades that haven't settled.
+  escrowMatchesTrades: {
+    sql: `SELECT escrow, owed
+            FROM (SELECT coalesce(sum(amount_cents), 0)::bigint AS escrow
+                    FROM ledger_entries WHERE account = 'escrow') books,
+                 (SELECT coalesce(sum(price_cents), 0)::bigint AS owed
                     FROM trades WHERE status IN ${UNSETTLED}) trades
-           WHERE cash + in_trades <> users * ${STARTING_CASH_CENTS}`,
-    describe: ({ cash, in_trades: inTrades, users }) =>
-      `${users} users should have $${formatCents(users * STARTING_CASH_CENTS)} between them; ` +
-      `they have $${formatCents(cash)} in cash and $${formatCents(inTrades)} in unsettled trades.`,
+           WHERE escrow <> owed`,
+    describe: (row) =>
+      `Escrow holds $${formatCents(row.escrow)}, but unsettled trades add up to $${formatCents(row.owed)}.`,
+  },
+
+  // Fees are exactly the seller fees of completed trades.
+  feesMatchTrades: {
+    sql: `SELECT fees, owed
+            FROM (SELECT coalesce(sum(amount_cents), 0)::bigint AS fees
+                    FROM ledger_entries WHERE account = 'fees') books,
+                 (SELECT coalesce(sum(seller_fee_cents), 0)::bigint AS owed
+                    FROM trades WHERE status = 'completed') trades
+           WHERE fees <> owed`,
+    describe: (row) =>
+      `reVINYL has taken $${formatCents(row.fees)} in fees, but completed trades' fees add up to $${formatCents(row.owed)}.`,
+  },
+
+  // Every trade was paid for once, and a settled trade was paid out (completed) or refunded
+  // once, to the right person for the right amount: the journals agree with the trade.
+  tradeJournals: {
+    sql: `SELECT t.id, t.status,
+                 count(j.id) FILTER (WHERE j.kind = 'trade_payment') AS payments,
+                 count(j.id) FILTER (WHERE j.kind = 'trade_payout') AS payouts,
+                 count(j.id) FILTER (WHERE j.kind = 'trade_refund') AS refunds
+            FROM trades t LEFT JOIN ledger_journals j ON j.trade_id = t.id
+           GROUP BY t.id
+          HAVING count(j.id) FILTER (WHERE j.kind = 'trade_payment') <> 1
+              OR count(j.id) FILTER (WHERE j.kind = 'trade_payout') <> (t.status = 'completed')::int
+              OR count(j.id) FILTER (WHERE j.kind = 'trade_refund') <> (t.status = 'refunded')::int
+              OR EXISTS (
+                   SELECT 1 FROM ledger_journals jj JOIN ledger_entries e ON e.journal_id = jj.id
+                    WHERE jj.trade_id = t.id AND e.account = 'cash'
+                      AND NOT ((jj.kind = 'trade_payment' AND e.user_id = t.buyer_id
+                                AND e.amount_cents = -t.price_cents)
+                            OR (jj.kind = 'trade_refund' AND e.user_id = t.buyer_id
+                                AND e.amount_cents = t.price_cents)
+                            OR (jj.kind = 'trade_payout' AND e.user_id = t.seller_id
+                                AND e.amount_cents = t.price_cents - t.seller_fee_cents)))
+           ORDER BY t.id LIMIT ${MAX_EXAMPLES}`,
+    describe: (row) =>
+      `Trade ${row.id} (${row.status}) has ${row.payments} payments, ${row.payouts} payouts and ` +
+      `${row.refunds} refunds, or one of them went to the wrong person or amount.`,
   },
 
   // Held cash is exactly what your open WANTED ads would cost.

@@ -136,13 +136,16 @@ export async function bookFromDatabase(pool, releaseId) {
 
 /**
  * Run after every market test (Part 7): the exchange's rules hold in the database, and
- * every book the order service has in memory says the same as the database. A failure
+ * every current book the order service has in memory says the same as the database. A failure
  * lists the broken rules or shows the book that drifted.
  * @param {ReturnType<typeof createTestContext>} ctx
  */
 export async function expectExchangeConsistent(ctx) {
   expect(await findBrokenRules(ctx.pool)).toEqual([]);
   for (const [releaseId, book] of ctx.orders.books) {
+    // A book behind the database's version is never matched against: the next order
+    // reloads it (OrderService.#transaction). Only a current book has to be exact.
+    if (!(await ctx.orders.isCurrent(releaseId))) continue;
     expect(bookContents(book), `the book for ${releaseId}`).toEqual(
       await bookFromDatabase(ctx.pool, releaseId),
     );

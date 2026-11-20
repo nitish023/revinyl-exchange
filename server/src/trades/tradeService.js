@@ -11,8 +11,9 @@
  * Every change: lock the trade row, check who is asking and the status, change the trade,
  * the wallets and the copy in one transaction, then tell browsers (ctx.live) after COMMIT.
  *
- * The buyer paid when the trade was made (Part 3), so until it settles the price sits in
- * the trade itself: it's in nobody's cash. Settling gives it to exactly one person.
+ * The buyer paid when the trade was made (Part 3): the price went from their cash into
+ * escrow (the ledger, server/src/ledger/ledger.js). Settling empties it to exactly one
+ * person: the seller, less their fee, or the buyer, in full.
  *
  * Locks, always in this order: the trade, then both people's wallets in id order, then the
  * copy. Two trades between the same two people, going opposite ways, therefore can't each
@@ -27,6 +28,7 @@
  * transaction change a wallet at a time, but lets the key checks through.
  */
 import { withTransaction } from '../db/pool.js';
+import { postJournal, tradeJournals } from '../ledger/ledger.js';
 import { AppError, notFound } from '../errors.js';
 import { toTradeView } from '../orders/orderRows.js';
 
@@ -167,10 +169,11 @@ export class TradeService {
           'SELECT id FROM users WHERE id = ANY($1::bigint[]) ORDER BY id FOR NO KEY UPDATE',
           [[row.buyer_id, row.seller_id]],
         );
-        await client.query('UPDATE users SET cash_cents = cash_cents + $2 WHERE id = $1', [
-          row[`${step.paid}_id`],
-          row.price_cents,
-        ]);
+        // Escrow pays out: to the seller less their fee, or back to the buyer in full.
+        await postJournal(
+          client,
+          step.paid === 'seller' ? tradeJournals.payout(row) : tradeJournals.refund(row),
+        );
         // A copy changing hands drops its Discogs instance id: that belonged to the old
         // owner's collection, and the buyer may have imported the same one (PROJECT.md).
         const { rowCount } = await client.query(
