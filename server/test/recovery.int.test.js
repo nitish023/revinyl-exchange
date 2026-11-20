@@ -164,6 +164,15 @@ describe('the exchange rules (findBrokenRules)', () => {
       'a FOR SALE ad drops below an open WANTED ad’s price',
       (s) => ['UPDATE orders SET price_cents = 1500 WHERE id = $1', [s.forSale.order.id]],
     ],
+    [
+      'expiry',
+      'an ad stays open an hour past its expiry (no sweep ran)',
+      (s) => [
+        `UPDATE orders SET created_at = now() - interval '2 days', expires_at = now() - interval '1 hour'
+          WHERE id = $1`,
+        [s.forSale.order.id],
+      ],
+    ],
   ])('%s catches it when %s', async (rules, _what, breakIt) => {
     const state = await busyExchange();
     expect(await findBrokenRules(ctx.pool)).toEqual([]);

@@ -19,6 +19,16 @@ export function toPlacedOrder(row) {
     status: row.status,
     createdAt: row.created_at.toISOString(),
     closedAt: row.closed_at ? row.closed_at.toISOString() : null,
+    // Part 15: when it expires on its own, its "stay on top" rule, and the ad it replaced.
+    expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
+    reprice:
+      row.reprice_step_cents === null || row.reprice_step_cents === undefined
+        ? null
+        : {
+            step: formatCents(row.reprice_step_cents),
+            limit: formatCents(row.reprice_limit_cents),
+          },
+    replacesOrderId: row.replaces_order_id ?? null,
   };
 }
 

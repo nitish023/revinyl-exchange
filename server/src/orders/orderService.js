@@ -28,13 +28,20 @@
  * person on different pressings take turns on that person's wallet, so the same dollars
  * can't back two orders.
  */
-import { formatCents, gradeByRank, placeOrderSchema, sellToSchema } from '../../../shared/index.js';
+import {
+  DEFAULT_BID_EXPIRY_DAYS,
+  formatCents,
+  gradeByRank,
+  placeOrderSchema,
+  sellToSchema,
+} from '../../../shared/index.js';
 import { withTransaction } from '../db/pool.js';
 import { postJournal, tradeJournals } from '../ledger/ledger.js';
 import { sellerFeeFor } from '../sellers/sellerRecord.js';
 import { AppError, notFound } from '../errors.js';
 import { OrderBook } from '../market/orderBook.js';
 import { KeyedSerialQueue } from './keyedSerialQueue.js';
+import { nextReprice } from './repricing.js';
 import { loadOpenOrders, toEngineOrder, toPlacedOrder, toTradeView } from './orderRows.js';
 
 /**
@@ -46,7 +53,7 @@ import { loadOpenOrders, toEngineOrder, toPlacedOrder, toTradeView } from './ord
  * @property {number} [minGrade]
  * @property {number} [copyId]
  * @property {string} note
- * @property {'open' | 'filled' | 'cancelled'} status
+ * @property {'open' | 'filled' | 'cancelled' | 'expired'} status
  * @property {string} createdAt ISO date
  * @property {string | null} closedAt
  */
@@ -229,7 +236,7 @@ export class OrderService {
     // Someone else's order is "not found", so ids can't be used to probe other people's ads.
     if (rows.length === 0 || rows[0].user_id !== user.id) throw notFound('Order');
     const releaseId = rows[0].release_id;
-    return this.#queue.run(releaseId, () => this.#cancelInQueue(user, orderId, releaseId));
+    return this.#inQueue(releaseId, () => this.#cancelInQueue(user, orderId, releaseId));
   }
 
   async #releaseOfMyCopy(userId, copyId) {
@@ -248,13 +255,131 @@ export class OrderService {
    */
   #inQueue(releaseId, work) {
     return this.#queue.run(releaseId, async () => {
+      let result;
       try {
-        return await work();
+        result = await work();
       } catch (error) {
         if (!(error instanceof BookOutOfStepError)) throw error;
         console.warn(`[orders] ${error.message}; reloaded the book for ${releaseId} and retried`);
-        return work();
+        result = await work();
       }
+      // Part 15: the change may have moved a "stay on top" rule. Still in this turn of the
+      // queue, so nothing else on the pressing runs in between.
+      await this.#runRules(releaseId);
+      return result;
+    });
+  }
+
+  /**
+   * Part 15: expire every ad whose time is up, on every pressing. The server runs it once a
+   * minute; an ad is also expired, exactly on time, by the next order on its pressing (see
+   * #transaction), so this only matters for quiet pressings, to give holds and copies back.
+   * @returns {Promise<number>} how many pressings had ads to expire
+   */
+  async sweepExpired() {
+    const { rows } = await this.pool.query(
+      `SELECT DISTINCT release_id FROM orders
+        WHERE status = 'open' AND expires_at <= now() ORDER BY release_id`,
+    );
+    for (const { release_id: releaseId } of rows) {
+      // An empty piece of work: #transaction expires what's due before running it.
+      await this.#inQueue(releaseId, () => this.#transaction(releaseId, async () => null));
+    }
+    return rows.length;
+  }
+
+  /**
+   * Part 15: let the pressing's "stay on top" rules react, one move at a time, until none
+   * wants to move (or MAX_RULE_MOVES, to bound one turn of the queue; the next change on
+   * the pressing carries on). A move that fails (a WANTED ad without the cash to rise) is
+   * skipped for this turn. Never fails the request that triggered it.
+   */
+  async #runRules(releaseId) {
+    const skip = new Set();
+    try {
+      for (let moves = 0; moves < MAX_RULE_MOVES; moves += 1) {
+        const rules = await loadRules(this.pool, releaseId);
+        if (rules.length === 0) return;
+        const book = this.books.get(releaseId) ?? (await this.book(releaseId));
+        const move = nextReprice(rules, [...book.asks(), ...book.bids()], skip);
+        if (!move) return;
+        try {
+          await this.#replace(releaseId, move.order.id, move.priceCents);
+        } catch (error) {
+          if (!(error instanceof AppError) && !(error instanceof BookOutOfStepError)) throw error;
+          skip.add(move.order.id);
+        }
+      }
+    } catch (error) {
+      console.error(`[orders] repricing rules on ${releaseId} stopped:`, error);
+    }
+  }
+
+  /**
+   * Part 15: move an ad to a new price, as one transaction: close it and place a new order
+   * with the same copy or grade, rule and expiry at the new price, which matches like any
+   * order (a lowered FOR SALE ad that meets a WANTED ad sells). Like on a real exchange, a
+   * new price means a new place in the queue.
+   */
+  async #replace(releaseId, orderId, priceCents) {
+    const { saved, book } = await this.#transaction(releaseId, async (client, current) => {
+      const { rows } = await client.query(
+        `SELECT o.*, c.grade FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
+          WHERE o.id = $1 FOR NO KEY UPDATE OF o`,
+        [orderId],
+      );
+      const old = rows[0];
+      if (!old || old.status !== 'open') return null; // filled or cancelled meanwhile
+      await closeOrder(client, old, 'cancelled');
+      const extras = {
+        expiresAt: old.expires_at,
+        repriceStep: old.reprice_step_cents,
+        repriceLimit: old.reprice_limit_cents,
+        replacesOrderId: old.id,
+      };
+      const placed =
+        old.side === 'bid'
+          ? await insertBid(
+              client,
+              old.user_id,
+              { releaseId, price: priceCents, minGrade: old.min_grade, note: old.note },
+              extras,
+            )
+          : await insertAsk(
+              client,
+              old.user_id,
+              { copyId: old.copy_id, price: priceCents },
+              extras,
+            );
+      // Match without the old ad, which leaves the book only after COMMIT.
+      const scratch = new OrderBook(releaseId);
+      for (const order of [...current.asks(), ...current.bids()]) {
+        if (order.id !== old.id) scratch.add(order);
+      }
+      const result = scratch.match(placed.engine);
+      const trade = result.trade
+        ? await recordTrade(client, placed.engine, result.trade, releaseId)
+        : await rest(client, placed.engine);
+      const { rows: fresh } = await client.query('SELECT * FROM orders WHERE id = $1', [
+        placed.engine.id,
+      ]);
+      return { old, engine: placed.engine, result, row: fresh[0], trade };
+    });
+    if (!saved) return;
+
+    this.#updateBook(book, (b) => {
+      b.remove(saved.old.id);
+      b.apply(saved.engine, saved.result);
+    });
+    const owner = { id: saved.old.user_id };
+    this.#announce(releaseId, (live) => {
+      live.notifyUser(owner.id, {
+        type: 'order',
+        releaseId,
+        orderId: saved.old.id,
+        status: 'cancelled',
+      });
+      this.#tellAboutOrder(live, owner, releaseId, saved);
     });
   }
 
@@ -322,8 +447,8 @@ export class OrderService {
     const { saved, book } = await this.#transaction(releaseId, async (client, book) => {
       const order =
         request.side === 'bid'
-          ? await insertBid(client, user.id, request)
-          : await insertAsk(client, user.id, request);
+          ? await insertBid(client, user.id, request, adExtras(request))
+          : await insertAsk(client, user.id, request, adExtras(request));
       const result = book.match(order.engine);
       const trade = result.trade
         ? await recordTrade(client, order.engine, result.trade, releaseId)
@@ -384,24 +509,10 @@ export class OrderService {
         throw new AppError(
           409,
           'ORDER_NOT_OPEN',
-          'That order has already been filled or cancelled.',
+          'That order has already been filled, cancelled or has expired.',
         );
       }
-      const { rows: cancelled } = await client.query(
-        `UPDATE orders SET status = 'cancelled', closed_at = now() WHERE id = $1 RETURNING *`,
-        [orderId],
-      );
-      if (rows[0].side === 'bid') {
-        await client.query('UPDATE users SET held_cents = held_cents - $2 WHERE id = $1', [
-          user.id,
-          rows[0].price_cents,
-        ]);
-      } else {
-        await client.query(`UPDATE copies SET status = 'in_crate' WHERE id = $1`, [
-          rows[0].copy_id,
-        ]);
-      }
-      return cancelled[0];
+      return closeOrder(client, rows[0], 'cancelled');
     });
 
     this.#updateBook(book, (b) => b.remove(orderId));
@@ -429,27 +540,45 @@ export class OrderService {
    */
   async #transaction(releaseId, work) {
     try {
-      const { saved, book, version } = await withTransaction(this.pool, async (client) => {
+      const { saved, book, version, expired } = await withTransaction(this.pool, async (client) => {
         await client.query('SELECT pg_advisory_xact_lock($1)', [releaseId]);
         const current = (await readVersions(client, releaseId)).get(releaseId) ?? 0;
         let book = this.books.get(releaseId);
-        if (!book || this.#versions.get(releaseId) !== current) {
-          // Another process changed this pressing's orders (or it isn't loaded): reload
-          // under the lock, so what we match against is exactly what's open.
+        // Part 15: ads whose time is up close first, so nothing can match an expired ad.
+        const expired = await expireDue(client, releaseId);
+        if (!book || this.#versions.get(releaseId) !== current || expired.length > 0) {
+          // Another process changed this pressing's orders, ads just expired, or it isn't
+          // loaded: rebuild under the lock, so what we match against is exactly what's open.
           book = buildBook(
             releaseId,
             (await loadOpenOrders(client, releaseId)).get(releaseId) ?? [],
           );
         }
         const saved = await work(client, book);
-        return { saved, book, version: await bumpVersion(client, releaseId) };
+        return { saved, book, version: await bumpVersion(client, releaseId), expired };
       });
       this.#keep(book, version);
+      if (expired.length > 0) this.#announceExpired(releaseId, expired);
       return { saved, book };
     } catch (error) {
       if (!(error instanceof AppError)) this.#forget(releaseId);
       throw error;
     }
+  }
+
+  /** Tell the owners of ads that just expired, and the market. */
+  #announceExpired(releaseId, expired) {
+    this.#announce(releaseId, (live) => {
+      for (const row of expired) {
+        live.notifyUser(row.user_id, {
+          type: 'order',
+          releaseId,
+          orderId: row.id,
+          status: 'expired',
+        });
+        if (row.side === 'bid') live.notifyUser(row.user_id, { type: 'wallet', releaseId });
+      }
+    });
   }
 
   /** Keep a book as the current one for its pressing, at a `book_versions` version. */
@@ -518,8 +647,44 @@ function buildBook(releaseId, orders) {
   return book;
 }
 
+/** At most this many rule moves in one turn of a pressing's queue (Part 15). */
+const MAX_RULE_MOVES = 25;
+const DAY_MS = 86_400_000;
+
+/**
+ * @typedef {object} AdExtras Part 15's settings for an ad that rests
+ * @property {Date | null} expiresAt
+ * @property {number | null} repriceStep
+ * @property {number | null} repriceLimit
+ * @property {number | null} replacesOrderId
+ */
+
+/** @type {AdExtras} targeted orders never rest, so they have none */
+const NO_EXTRAS = Object.freeze({
+  expiresAt: null,
+  repriceStep: null,
+  repriceLimit: null,
+  replacesOrderId: null,
+});
+
+/** A placed ad's expiry and rule, from the request: WANTED ads run 30 days unless told. */
+function adExtras(request) {
+  const days =
+    request.expiresInDays === undefined
+      ? request.side === 'bid'
+        ? DEFAULT_BID_EXPIRY_DAYS
+        : null
+      : request.expiresInDays;
+  return {
+    expiresAt: days === null ? null : new Date(Date.now() + days * DAY_MS),
+    repriceStep: request.repriceStep ?? null,
+    repriceLimit: request.repriceLimit ?? null,
+    replacesOrderId: null,
+  };
+}
+
 /** Lock the buyer's wallet, check they can cover the bid, and insert it. */
-async function insertBid(client, userId, request) {
+async function insertBid(client, userId, request, extras = NO_EXTRAS) {
   const { rows: wallets } = await client.query(
     'SELECT cash_cents, held_cents FROM users WHERE id = $1 FOR NO KEY UPDATE',
     [userId],
@@ -528,15 +693,26 @@ async function insertBid(client, userId, request) {
   // Even a bid that will fill for less must be covered in full, as if it rests.
   if (spendable < request.price) throw insufficientFunds(spendable, request.price);
   const { rows } = await client.query(
-    `INSERT INTO orders (user_id, release_id, side, price_cents, min_grade, note)
-     VALUES ($1, $2, 'bid', $3, $4, $5) RETURNING *`,
-    [userId, request.releaseId, request.price, request.minGrade, request.note],
+    `INSERT INTO orders (user_id, release_id, side, price_cents, min_grade, note,
+                         expires_at, reprice_step_cents, reprice_limit_cents, replaces_order_id)
+     VALUES ($1, $2, 'bid', $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    [
+      userId,
+      request.releaseId,
+      request.price,
+      request.minGrade,
+      request.note,
+      extras.expiresAt,
+      extras.repriceStep,
+      extras.repriceLimit,
+      extras.replacesOrderId,
+    ],
   );
   return { engine: toEngineOrder(rows[0]) };
 }
 
 /** Lock the seller's copy, check it's in their crate, and insert the ask. */
-async function insertAsk(client, userId, request) {
+async function insertAsk(client, userId, request, extras = NO_EXTRAS) {
   const { rows: copies } = await client.query(
     `SELECT id, release_id, grade, status FROM copies
       WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR NO KEY UPDATE`,
@@ -545,11 +721,75 @@ async function insertAsk(client, userId, request) {
   if (copies.length === 0) throw notFound('Copy');
   if (copies[0].status !== 'in_crate') throw copyNotAvailable();
   const { rows } = await client.query(
-    `INSERT INTO orders (user_id, release_id, side, price_cents, copy_id)
-     VALUES ($1, $2, 'ask', $3, $4) RETURNING *`,
-    [userId, copies[0].release_id, request.price, request.copyId],
+    `INSERT INTO orders (user_id, release_id, side, price_cents, copy_id,
+                         expires_at, reprice_step_cents, reprice_limit_cents, replaces_order_id)
+     VALUES ($1, $2, 'ask', $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [
+      userId,
+      copies[0].release_id,
+      request.price,
+      request.copyId,
+      extras.expiresAt,
+      extras.repriceStep,
+      extras.repriceLimit,
+      extras.replacesOrderId,
+    ],
   );
   return { engine: toEngineOrder(rows[0], copies[0].grade) };
+}
+
+/**
+ * Close an open order as cancelled or expired: a bid's hold goes back to its buyer, an
+ * ask's copy back to the crate. The caller has locked the order row.
+ * @returns {Promise<object>} the closed `orders` row
+ */
+async function closeOrder(client, row, status) {
+  const { rows } = await client.query(
+    `UPDATE orders SET status = $2, closed_at = now() WHERE id = $1 AND status = 'open' RETURNING *`,
+    [row.id, status],
+  );
+  if (rows.length === 0) throw new BookOutOfStepError(`Order ${row.id} isn't open any more`);
+  if (row.side === 'bid') {
+    await client.query('UPDATE users SET held_cents = held_cents - $2 WHERE id = $1', [
+      row.user_id,
+      row.price_cents,
+    ]);
+  } else {
+    await client.query(`UPDATE copies SET status = 'in_crate' WHERE id = $1`, [row.copy_id]);
+  }
+  return rows[0];
+}
+
+/** Part 15: expire a pressing's open ads whose time is up. Returns the expired rows. */
+async function expireDue(client, releaseId) {
+  const { rows } = await client.query(
+    `SELECT * FROM orders WHERE release_id = $1 AND status = 'open' AND expires_at <= now()
+      ORDER BY id FOR NO KEY UPDATE`,
+    [releaseId],
+  );
+  const expired = [];
+  for (const row of rows) expired.push(await closeOrder(client, row, 'expired'));
+  return expired;
+}
+
+/** Part 15: a pressing's open ads that have a "stay on top" rule. */
+async function loadRules(db, releaseId) {
+  const { rows } = await db.query(
+    `SELECT o.id, o.user_id, o.side, o.price_cents, o.min_grade, o.reprice_step_cents,
+            o.reprice_limit_cents, c.grade
+       FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
+      WHERE o.release_id = $1 AND o.status = 'open' AND o.reprice_step_cents IS NOT NULL`,
+    [releaseId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    side: row.side,
+    priceCents: row.price_cents,
+    stepCents: row.reprice_step_cents,
+    limitCents: row.reprice_limit_cents,
+    ...(row.side === 'ask' ? { grade: row.grade } : { minGrade: row.min_grade }),
+  }));
 }
 
 const ownAd = () => new AppError(400, 'OWN_AD', 'That’s your own ad.');
