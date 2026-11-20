@@ -114,6 +114,10 @@ describe('adCoupons', () => {
       price: '40',
       minGrade: 7,
       note: '',
+      // Part 15: a wanted ad runs 30 days unless the buyer picks otherwise; no rule.
+      expiresInDays: 30,
+      repriceStep: '',
+      repriceLimit: '',
     });
     expect(element.querySelector('.coupon-flash').textContent).toMatch(/\$40\.00 is held/);
     expect(onPosted).toHaveBeenCalledOnce();
@@ -142,7 +146,14 @@ describe('adCoupons', () => {
     submit(element.querySelector('form[aria-labelledby="sell-copy-title"]'));
     await settle();
 
-    expect(api.placeOrder).toHaveBeenCalledWith({ side: 'ask', copyId: 11, price: '30' });
+    expect(api.placeOrder).toHaveBeenCalledWith({
+      side: 'ask',
+      copyId: 11,
+      price: '30',
+      expiresInDays: null, // a FOR SALE ad runs until it's cancelled
+      repriceStep: '',
+      repriceLimit: '',
+    });
     expect(element.querySelector('.coupon-flash').textContent).toMatch(/^Sold for \$45\.00/);
   });
 

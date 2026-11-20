@@ -23,6 +23,7 @@ import { h } from '../dom.js';
 import { api, ApiError } from '../lib/api.js';
 import { payoutLine } from '../lib/fees.js';
 import { chanceLine, fairFor, fairLine, suggestionChips } from '../lib/pricing.js';
+import { adSettings } from './adSettings.js';
 import { couponForm } from './couponForm.js';
 
 /** Mint first: that's how the grade scale reads in record shops. */
@@ -195,6 +196,7 @@ export function sellForm({ copies, standing = null, pricing = null, onDone }) {
     ),
   );
   const price = priceInput();
+  const settings = adSettings('ask');
   const form = couponForm({
     id: 'sell-copy',
     title: 'Sell your copy',
@@ -205,8 +207,14 @@ export function sellForm({ copies, standing = null, pricing = null, onDone }) {
     fields: [
       { name: 'copyId', label: 'Copy', control: copy },
       { name: 'price', label: 'Asking price ($)', control: price },
+      ...settings.fields,
     ],
-    collect: () => ({ side: 'ask', copyId: idOf(copy.value), price: price.value }),
+    collect: () => ({
+      side: 'ask',
+      copyId: idOf(copy.value),
+      price: price.value,
+      ...settings.collect(),
+    }),
     onSubmit: async (values) => {
       const { order, trade } = await api.placeOrder(values);
       await onDone(
@@ -291,6 +299,7 @@ export function wantedForm({ release, wallet, onDone }) {
   };
   price.addEventListener('input', showHold);
   showHold();
+  const settings = adSettings('bid');
 
   const form = couponForm({
     id: 'wanted-ad',
@@ -303,6 +312,7 @@ export function wantedForm({ release, wallet, onDone }) {
       { name: 'minGrade', label: 'Lowest grade you’ll take', control: minGrade, group: true },
       { name: 'price', label: 'Most you’ll pay ($)', control: price },
       { name: 'note', label: 'A line for sellers (optional)', control: note },
+      ...settings.fields,
     ],
     footnote: holdNote,
     collect: () => {
@@ -313,6 +323,7 @@ export function wantedForm({ release, wallet, onDone }) {
         price: price.value,
         minGrade: picked ? picked.rank : undefined,
         note: note.value,
+        ...settings.collect(),
       };
     },
     onSubmit: async (values) => {
