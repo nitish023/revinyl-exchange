@@ -74,3 +74,60 @@ describe('GET /api/releases/:id/pricing', () => {
     await request(app).get('/api/releases/abc/pricing').expect(400);
   });
 });
+
+describe('GET /api/releases/:id/history (Part 14)', () => {
+  const historyOf = async () =>
+    (await request(app).get(`/api/releases/${RELEASE}/history`).expect(200)).body.history;
+
+  it('is empty for a pressing nobody has traded', async () => {
+    expect(await historyOf()).toEqual({
+      candles: [],
+      stats: {
+        monthlyVolatility: null,
+        change30: null,
+        high52: null,
+        low52: null,
+        lastClose: null,
+      },
+      depth: [],
+    });
+  });
+
+  it('turns today’s sales into one candle in VG+ terms, and the open ads into depth', async () => {
+    const [seller, buyer] = [await signUp('sella'), await signUp('buyer')];
+    await sale(seller, buyer, '40.00');
+    await sale(seller, buyer, '30.00');
+    await listCopy(seller, '45.00');
+    await listCopy(seller, '50.00');
+    await buyer.post('/api/orders', { side: 'bid', releaseId: RELEASE, price: '25', minGrade: 1 });
+    const { candles, stats, depth } = await historyOf();
+    expect(candles).toHaveLength(1);
+    expect(candles[0]).toMatchObject({
+      open: '40.00',
+      close: '30.00',
+      high: '40.00',
+      low: '30.00',
+      sales: 2,
+    });
+    expect(stats.lastClose).toBe('30.00');
+    expect(stats.monthlyVolatility).toBeNull(); // one day of sales
+    // The wanted ad takes any grade, so it's in every grade's book; the copies are VG+.
+    expect(depth.map((book) => book.code)).toEqual(['P', 'F', 'G', 'G+', 'VG', 'VG+', 'NM', 'M']);
+    const vgPlus = depth.find((book) => book.code === 'VG+');
+    expect(vgPlus.asks).toEqual([
+      { price: '45.00', copies: 1 },
+      { price: '50.00', copies: 2 },
+    ]);
+    expect(vgPlus.bids).toEqual([{ price: '25.00', copies: 1 }]);
+    expect(vgPlus.spread).toEqual({ bid: '25.00', ask: '45.00', amount: '20.00', share: 20 / 45 });
+    expect(depth.find((book) => book.code === 'NM')).toMatchObject({ asks: [], spread: null });
+  });
+
+  it('charts the demo month', async () => {
+    await seedDemo(ctx.pool);
+    const { candles, stats } = await historyOf();
+    expect(candles.length).toBeGreaterThan(3);
+    expect(candles.map((c) => c.day)).toEqual([...candles.map((c) => c.day)].sort());
+    expect(stats.monthlyVolatility).toBeGreaterThan(0);
+  });
+});

@@ -10,6 +10,7 @@
  */
 import { formatCents, gradeByRank } from '../../../shared/index.js';
 import { fitFairValue, HALF_LIFE_DAYS, pooledGradeStep } from './fairValue.js';
+import { dailyCandles, depthByGrade, priceStats } from './history.js';
 import { fitSaleOdds } from './saleOdds.js';
 
 /** Sales older than this say nothing useful about today's prices (weight < 0.02%). */
@@ -99,6 +100,72 @@ export class PricingService {
       if (this.#market?.value === value) this.#market = null;
     });
     return value;
+  }
+
+  /**
+   * A pressing's price history in VG+ terms (daily candles and their stats) and its order
+   * book as depth staircases (Part 14), as the API sends them.
+   * @param {number} releaseId
+   */
+  async history(releaseId) {
+    const now = this.now();
+    const [{ gradeStep: marketStep }, byRelease, book] = await Promise.all([
+      this.#learnFromMarket(),
+      loadSales(this.pool, now, releaseId),
+      this.pool.query(
+        `SELECT o.side, o.price_cents, o.min_grade, c.grade
+           FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
+          WHERE o.release_id = $1 AND o.status = 'open'`,
+        [releaseId],
+      ),
+    ]);
+    const sales = byRelease.get(releaseId) ?? [];
+    // The pressing's own grade premium where it has sales; the market's where it doesn't.
+    const fair = fitFairValue(sales, { now, priorStep: marketStep });
+    const gradeStep = fair ? fair.gradeStep : marketStep;
+    const candles = dailyCandles(sales, gradeStep);
+    const stats = priceStats(candles, now);
+    const orders = (side) =>
+      book.rows
+        .filter((row) => row.side === side)
+        .map((row) => ({ priceCents: row.price_cents, minGrade: row.min_grade, grade: row.grade }));
+    const books = depthByGrade(orders('bid'), orders('ask'));
+    const money = (cents) => (cents === null ? null : formatCents(cents));
+    const steps = (list) =>
+      list.map((step) => ({ price: formatCents(step.priceCents), copies: step.copies }));
+    const toApi = (levels) => ({
+      bids: steps(levels.bids),
+      asks: steps(levels.asks),
+      spread: levels.spread && {
+        bid: formatCents(levels.spread.bidCents),
+        ask: formatCents(levels.spread.askCents),
+        amount: formatCents(levels.spread.cents),
+        share: levels.spread.share,
+      },
+    });
+    return {
+      candles: candles.map((candle) => ({
+        day: candle.day,
+        open: formatCents(candle.open),
+        high: formatCents(candle.high),
+        low: formatCents(candle.low),
+        close: formatCents(candle.close),
+        sales: candle.sales,
+      })),
+      stats: {
+        monthlyVolatility: stats.monthlyVolatility,
+        change30: stats.change30,
+        high52: money(stats.high52),
+        low52: money(stats.low52),
+        lastClose: money(stats.lastClose),
+      },
+      // One book per grade: for sale at that grade, against the ads that would take it.
+      depth: Object.entries(books).map(([grade, levels]) => ({
+        grade: Number(grade),
+        code: gradeByRank(Number(grade)).code,
+        ...toApi(levels),
+      })),
+    };
   }
 
   /**
