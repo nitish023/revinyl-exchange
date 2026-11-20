@@ -1723,6 +1723,41 @@ select.input {
   color: var(--paper);
 }
 
+/* Part 13: suggested prices in the sell form, and the appraisal. */
+.price-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.price-chips:empty {
+  display: none;
+}
+.price-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-label);
+  font-size: 12px;
+  cursor: pointer;
+}
+.price-chip:hover,
+.price-chip:focus-visible {
+  background: var(--ink);
+  color: var(--paper);
+}
+.appraisal {
+  margin-top: var(--space-section);
+}
+.appraisal-table td:nth-child(n + 2),
+.appraisal-table th:nth-child(n + 2) {
+  text-align: right;
+}
+.appraisal-sold td {
+  font-weight: 700;
+}
+
 /* The ledger's statement (your cash, line by line) and reVINYL's books. */
 .room-statement {
   margin-top: var(--space-section);

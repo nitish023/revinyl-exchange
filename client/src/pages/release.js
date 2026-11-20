@@ -1,3 +1,4 @@
+import { appraisalSection } from '../components/appraisal.js';
 import { cover } from '../components/cover.js';
 import { marketSection } from '../components/market.js';
 import { errorState, loadingState } from '../components/states.js';
@@ -66,7 +67,7 @@ function tracks(release) {
   );
 }
 
-function releaseView(release, market) {
+function releaseView(release, market, appraisal) {
   document.title = documentTitle(release);
   const byline = [
     release.artist,
@@ -115,6 +116,7 @@ function releaseView(release, market) {
       market.classifieds,
     ),
     market.report,
+    appraisal.element,
   );
 }
 
@@ -123,8 +125,9 @@ function releaseView(release, market) {
  * connection. Your own orders are reloaded when the server says one of them changed,
  * or when you log in or out. Everything stops when you leave the page.
  */
-function followMarket(release, market, signal) {
+function followMarket(release, market, appraisal, signal) {
   let latest = null;
+  let lastSale = null;
   let mine = new Set();
   let wasDisconnected = false;
 
@@ -150,6 +153,10 @@ function followMarket(release, market, signal) {
       if (!isNewerMarket(next, latest)) return;
       latest = next;
       market.show(latest, mine);
+      // A new sale moves fair value: appraise again (Part 13).
+      const sale = JSON.stringify(next.report?.lastSale ?? null);
+      if (lastSale !== null && sale !== lastSale) appraisal.refresh();
+      lastSale = sale;
     }),
     live.onStatus((status) => {
       market.setStatus(status);
@@ -189,8 +196,9 @@ export const releasePage = (ctx) => {
         // arrives over the live connection like everyone else's.
         onPosted: () => following?.reloadMine(),
       });
-      replaceChildren(root, releaseView(release, market));
-      following = followMarket(release, market, ctx.signal);
+      const appraisal = appraisalSection({ releaseId: release.id, signal: ctx.signal });
+      replaceChildren(root, releaseView(release, market, appraisal));
+      following = followMarket(release, market, appraisal, ctx.signal);
     } catch (error) {
       if (isAbortError(error) || ctx.signal.aborted) return;
       if (error instanceof ApiError && error.status === 404) {
