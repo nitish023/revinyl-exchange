@@ -94,6 +94,21 @@ describe('GET /api/portfolio', () => {
     expect(portfolio.totals).toMatchObject({ realized: '12.80', returnShare: 0.32 });
   });
 
+  it('charts net worth over 90 days: today’s point is today’s net worth', async () => {
+    const [ana, ben] = [await signUp('anna'), await signUp('benny')];
+    await sale(ben, ana, '40.00');
+    const { portfolio } = (await ana.get('/api/portfolio').expect(200)).body;
+    expect(portfolio.history).toHaveLength(90);
+    expect(portfolio.history.at(-1)).toEqual({
+      day: new Date().toISOString().slice(0, 10),
+      cash: '1960.00',
+      holdings: '40.00',
+      netWorth: '2000.00',
+    });
+    // Before she signed up she had nothing.
+    expect(portfolio.history[0]).toMatchObject({ netWorth: '0.00' });
+  });
+
   it('counts a copy on its way at what it cost, and needs a login', async () => {
     const [ana, ben] = [await signUp('anna'), await signUp('benny')];
     await sale(ben, ana, '25.00', { until: 'made' });

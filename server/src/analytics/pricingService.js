@@ -133,6 +133,31 @@ export class PricingService {
   }
 
   /**
+   * Part 18: for net worth over time, each pressing's grade premium and its clean sales in
+   * VG+ terms, oldest first.
+   * @param {number[]} releaseIds
+   * @returns {Promise<Map<number, { gradeStep: number, sales: { at: number, vgPlusCents: number }[] }>>}
+   */
+  async markets(releaseIds) {
+    const now = this.now();
+    const { gradeStep: marketStep } = await this.#learnFromMarket();
+    const byRelease = await loadSales(this.pool, now);
+    const markets = new Map();
+    for (const releaseId of releaseIds) {
+      const sales = byRelease.get(releaseId) ?? [];
+      const fair = fitFairValue(sales, { now, priorStep: marketStep });
+      const gradeStep = fair ? fair.gradeStep : marketStep;
+      markets.set(releaseId, {
+        gradeStep,
+        sales: sales
+          .map((sale) => ({ at: sale.at, vgPlusCents: vgPlusEquivalent(sale, gradeStep) }))
+          .sort((a, b) => a.at - b.at),
+      });
+    }
+    return markets;
+  }
+
+  /**
    * Part 18: every clean sale in the window, restated as a VG+ copy with its pressing's own
    * grade premium, for the reVINYL 30.
    * @returns {Promise<{ releaseId: number, priceCents: number, at: number }[]>}

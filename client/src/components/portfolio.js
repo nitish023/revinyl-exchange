@@ -6,7 +6,25 @@
 import { h, replaceChildren } from '../dom.js';
 import { api, isAbortError } from '../lib/api.js';
 import { releasePath } from '../lib/records.js';
+import { lineChart } from './lineChart.js';
 import { signedAmount } from './statement.js';
+
+/**
+ * Net worth over the last 90 days, from the days you had any (before you joined it's $0,
+ * which would only squash the line). Nothing to draw with fewer than two days.
+ */
+export function netWorthChart(history = []) {
+  const points = history
+    .map((point) => ({ day: point.day, value: Number(point.netWorth) }))
+    .filter((point, i, all) => point.value !== 0 || all.slice(0, i).some((p) => p.value !== 0));
+  if (points.length < 2) return null;
+  const now = points.at(-1).value;
+  return lineChart({
+    points,
+    format: (value) => `$${Math.round(value).toLocaleString('en-US')}`,
+    label: `Your net worth over ${points.length} days, now $${now.toFixed(2)}.`,
+  });
+}
 
 const STATUS_WORDS = {
   in_crate: 'in your crate',
@@ -89,6 +107,7 @@ export function portfolioSection({ signal }) {
       replaceChildren(
         body,
         h('p', { class: 'room-standing-text' }, portfolioSummary(portfolio.totals)),
+        netWorthChart(portfolio.history),
         portfolio.holdings.length
           ? table(
               'Your records at fair value, with what each cost you',
