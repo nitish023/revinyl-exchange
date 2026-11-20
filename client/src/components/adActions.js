@@ -9,6 +9,7 @@
 import { gradeByRank } from '../../../shared/index.js';
 import { h, replaceChildren } from '../dom.js';
 import { api } from '../lib/api.js';
+import { payoutLine, standingOrNull } from '../lib/fees.js';
 import { errorsFromUnknown } from '../lib/forms.js';
 import { actionButton } from './actionButton.js';
 
@@ -57,8 +58,11 @@ function sellPicker(release, ad, onDone) {
     start.disabled = true;
     replaceChildren(root, say('Checking your crate…'));
     let copies;
+    let standing;
     try {
-      copies = copiesThatFit((await api.crate(release.id)).copies, ad.minGrade);
+      const [crate, seller] = await Promise.all([api.crate(release.id), standingOrNull()]);
+      copies = copiesThatFit(crate.copies, ad.minGrade);
+      standing = seller;
     } catch (failure) {
       start.disabled = false;
       const message = errorsFromUnknown(failure).message ?? 'Couldn’t read your crate.';
@@ -85,6 +89,7 @@ function sellPicker(release, ad, onDone) {
         done: `Sold for $${ad.price}. Ship it from your Listening Room.`,
         onDone,
       }),
+      standing ? h('span', { class: 'payout-preview' }, payoutLine(ad.price, standing)) : null,
     );
     choice.focus();
   });

@@ -1682,6 +1682,47 @@ select.input {
   font-weight: 700;
 }
 
+/* Part 12: what you'd be paid after fees, and you as a seller. */
+.payout-preview {
+  margin: 6px 0 0;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 14px;
+}
+.payout-preview:empty {
+  display: none;
+}
+.room-standing {
+  margin-top: 40px;
+  padding: 18px 20px;
+  border: 1px solid var(--ink);
+}
+.room-standing:empty {
+  display: none;
+}
+.room-standing-text {
+  margin: 8px 0 0;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.level-ladder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+.level-ladder .is-current {
+  padding: 0 6px;
+  background: var(--ink);
+  color: var(--paper);
+}
+
 /* The ledger's statement (your cash, line by line) and reVINYL's books. */
 .room-statement {
   margin-top: var(--space-section);

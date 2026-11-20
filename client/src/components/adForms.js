@@ -21,6 +21,7 @@ import {
 } from '../../../shared/index.js';
 import { h } from '../dom.js';
 import { api, ApiError } from '../lib/api.js';
+import { payoutLine } from '../lib/fees.js';
 import { couponForm } from './couponForm.js';
 
 /** Mint first: that's how the grade scale reads in record shops. */
@@ -162,9 +163,11 @@ export function addCopyForm({ release, onDone }) {
 
 /**
  * "Sell your copy": one of your copies of this pressing that's in your crate, and a price.
- * @param {{ copies: object[], onDone: (message: string) => Promise<void> }} options
+ * As the price is typed, it says what you'd be paid after your seller fee (Part 12).
+ * @param {{ copies: object[], standing?: { level: number } | null,
+ *   onDone: (message: string) => Promise<void> }} options
  */
-export function sellForm({ copies, onDone }) {
+export function sellForm({ copies, standing = null, onDone }) {
   if (copies.length === 0) {
     return h(
       'div',
@@ -211,6 +214,11 @@ export function sellForm({ copies, onDone }) {
       );
     },
   });
+  const payout = h('p', { class: 'payout-preview', 'aria-live': 'polite' });
+  price.addEventListener('input', () => {
+    payout.textContent = payoutLine(price.value, standing);
+  });
+  price.after(payout);
   return form.element;
 }
 

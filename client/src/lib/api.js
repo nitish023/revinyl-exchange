@@ -120,6 +120,8 @@ export const api = {
       before ? `/wallet/statement?before=${before}` : '/wallet/statement',
       signal ? { signal } : {},
     ),
+  /** Your standing as a seller: level, fee, reliability and what the next level needs. */
+  seller: (signal) => request('GET', '/seller', signal ? { signal } : {}),
   /** reVINYL's books: issued, in wallets, in escrow and fees (anyone can read them). */
   books: (signal) => request('GET', '/books', signal ? { signal } : {}),
   collectionPreview: (username, signal) =>
