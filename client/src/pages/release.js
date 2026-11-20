@@ -1,9 +1,11 @@
 import { appraisalSection } from '../components/appraisal.js';
+import { priceHistorySection } from '../components/priceHistory.js';
 import { cover } from '../components/cover.js';
 import { marketSection } from '../components/market.js';
 import { errorState, loadingState } from '../components/states.js';
 import { h, replaceChildren } from '../dom.js';
 import { api, ApiError, isAbortError } from '../lib/api.js';
+import { debounce } from '../lib/debounce.js';
 import { live } from '../lib/live.js';
 import { isNewerMarket } from '../lib/market.js';
 import { documentTitle, formatTags, labelColor, tracksBySide } from '../lib/records.js';
@@ -67,7 +69,7 @@ function tracks(release) {
   );
 }
 
-function releaseView(release, market, appraisal) {
+function releaseView(release, market, sections) {
   document.title = documentTitle(release);
   const byline = [
     release.artist,
@@ -116,7 +118,7 @@ function releaseView(release, market, appraisal) {
       market.classifieds,
     ),
     market.report,
-    appraisal.element,
+    sections.map((section) => section.element),
   );
 }
 
@@ -125,9 +127,8 @@ function releaseView(release, market, appraisal) {
  * connection. Your own orders are reloaded when the server says one of them changed,
  * or when you log in or out. Everything stops when you leave the page.
  */
-function followMarket(release, market, appraisal, signal) {
+function followMarket(release, market, onMarket, signal) {
   let latest = null;
-  let lastSale = null;
   let mine = new Set();
   let wasDisconnected = false;
 
@@ -153,10 +154,7 @@ function followMarket(release, market, appraisal, signal) {
       if (!isNewerMarket(next, latest)) return;
       latest = next;
       market.show(latest, mine);
-      // A new sale moves fair value: appraise again (Part 13).
-      const sale = JSON.stringify(next.report?.lastSale ?? null);
-      if (lastSale !== null && sale !== lastSale) appraisal.refresh();
-      lastSale = sale;
+      onMarket(latest);
     }),
     live.onStatus((status) => {
       market.setStatus(status);
@@ -196,9 +194,21 @@ export const releasePage = (ctx) => {
         // arrives over the live connection like everyone else's.
         onPosted: () => following?.reloadMine(),
       });
+      // Parts 13 and 14: the appraisal moves with each sale; the history and the book with
+      // every change to the market (gathered for a second, so a burst is one request).
       const appraisal = appraisalSection({ releaseId: release.id, signal: ctx.signal });
-      replaceChildren(root, releaseView(release, market, appraisal));
-      following = followMarket(release, market, appraisal, ctx.signal);
+      const history = priceHistorySection({ releaseId: release.id, signal: ctx.signal });
+      const refreshHistory = debounce(history.refresh, 1000);
+      ctx.signal.addEventListener('abort', () => refreshHistory.cancel(), { once: true });
+      let lastSale = null;
+      const onMarket = (next) => {
+        refreshHistory();
+        const sale = JSON.stringify(next.report?.lastSale ?? null);
+        if (lastSale !== null && sale !== lastSale) appraisal.refresh();
+        lastSale = sale;
+      };
+      replaceChildren(root, releaseView(release, market, [appraisal, history]));
+      following = followMarket(release, market, onMarket, ctx.signal);
     } catch (error) {
       if (isAbortError(error) || ctx.signal.aborted) return;
       if (error instanceof ApiError && error.status === 404) {
