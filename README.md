@@ -38,6 +38,9 @@ npm run test:all         # both
 npm run lint
 npm run format
 npm run db:check         # check the dev database still adds up (money, holds, copies, trades)
+npm run simulate         # the market with and without a market maker, side by side
+npm run db:simulate      # add 90 days of simulated market history to the dev database
+npm run db:reset         # start the dev database over: demo seed plus simulated history
 ```
 
 ## Production
