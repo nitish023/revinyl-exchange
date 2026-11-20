@@ -1758,6 +1758,15 @@ select.input {
   font-weight: 700;
 }
 
+/* Part 17: market integrity, under the appraisal. */
+.integrity-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 14px;
+}
+
 /* Part 16: auctions. */
 .auction-list {
   margin: 12px 0 0;

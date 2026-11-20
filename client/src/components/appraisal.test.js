@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../lib/api.js';
-import { appraisalSection } from './appraisal.js';
+import { appraisalSection, integrityNote } from './appraisal.js';
 
 vi.mock('../lib/api.js', async (importOriginal) => {
   const original = await importOriginal();
@@ -63,5 +63,37 @@ describe('the appraisal', () => {
     refresh();
     await settle();
     expect(element.textContent).toMatch(/isn’t available right now/);
+  });
+});
+
+describe('market integrity (Part 17)', () => {
+  it('lists the sales left out of the numbers, and why, without naming anyone', () => {
+    const note = integrityNote({
+      checked: 5,
+      washTrades: [
+        {
+          tradeId: 1,
+          price: '200.00',
+          code: 'VG+',
+          at: '2026-11-18T10:00:00.000Z',
+          reasons: ['round_trip'],
+        },
+      ],
+      outliers: [{ tradeId: 2, price: '400.00', code: 'NM', at: '2026-11-19T10:00:00.000Z' }],
+    });
+    expect(note.querySelector('p').textContent).toBe(
+      'Market integrity: 2 of 5 recent sales are left out of these numbers.',
+    );
+    expect([...note.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      '$200.00 (VG+), 2026-11-18: possible wash trading (the copy went back to someone who sold it)',
+      '$400.00 (NM), 2026-11-19: too far from every other sale to trust',
+    ]);
+  });
+
+  it('says the sales look real when none were set aside, and nothing before any sale', () => {
+    expect(integrityNote({ checked: 3, washTrades: [], outliers: [] }).textContent).toBe(
+      'Market integrity: all 3 recent sales look like real trades.',
+    );
+    expect(integrityNote({ checked: 0, washTrades: [], outliers: [] })).toBeNull();
   });
 });
