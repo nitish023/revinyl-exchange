@@ -18,6 +18,8 @@
     "db:seed": "node --env-file-if-exists=.env server/src/db/seed.js",
     "db:check": "node --env-file-if-exists=.env server/src/orders/exchangeRules.js",
     "simulate": "node server/src/sim/run.js",
+    "db:simulate": "node --env-file-if-exists=.env server/src/sim/history.js",
+    "db:reset": "node --env-file-if-exists=.env server/src/db/reset.js",
     "test": "vitest run --project unit --project client",
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
