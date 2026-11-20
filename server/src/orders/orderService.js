@@ -20,9 +20,9 @@
  * reloads it inside the transaction, before matching, so it never matches against orders
  * another process has already filled or cancelled, and never misses one it added.
  *
- * Locks: besides the pressing's advisory lock, a transaction locks at most one wallet
- * (users row) and one copy. A bid locks the
- * buyer's wallet, then the copy it buys; an ask locks its copy, then the buyer's wallet.
+ * Locks (all FOR NO KEY UPDATE: see tradeService.js for why): besides the pressing's
+ * advisory lock, a transaction locks at most one wallet (users row) and one copy. A bid
+ * locks the buyer's wallet, then the copy it buys; an ask locks its copy, then the buyer's wallet.
  * Those two can only wait on each other for the same copy, which means the same pressing,
  * and the queue never runs two of those at once, so they can't deadlock. Two bids from one
  * person on different pressings take turns on that person's wallet, so the same dollars
@@ -375,7 +375,7 @@ export class OrderService {
   async #cancelInQueue(user, orderId, releaseId) {
     const { saved: row, book } = await this.#transaction(releaseId, async (client) => {
       const { rows } = await client.query(
-        'SELECT * FROM orders WHERE id = $1 AND user_id = $2 FOR UPDATE',
+        'SELECT * FROM orders WHERE id = $1 AND user_id = $2 FOR NO KEY UPDATE',
         [orderId, user.id],
       );
       if (rows[0].status !== 'open') {
@@ -519,7 +519,7 @@ function buildBook(releaseId, orders) {
 /** Lock the buyer's wallet, check they can cover the bid, and insert it. */
 async function insertBid(client, userId, request) {
   const { rows: wallets } = await client.query(
-    'SELECT cash_cents, held_cents FROM users WHERE id = $1 FOR UPDATE',
+    'SELECT cash_cents, held_cents FROM users WHERE id = $1 FOR NO KEY UPDATE',
     [userId],
   );
   const spendable = wallets[0].cash_cents - wallets[0].held_cents;
@@ -537,7 +537,7 @@ async function insertBid(client, userId, request) {
 async function insertAsk(client, userId, request) {
   const { rows: copies } = await client.query(
     `SELECT id, release_id, grade, status FROM copies
-      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR UPDATE`,
+      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR NO KEY UPDATE`,
     [request.copyId, userId],
   );
   if (copies.length === 0) throw notFound('Copy');
@@ -556,7 +556,7 @@ const ownAd = () => new AppError(400, 'OWN_AD', 'That’s your own ad.');
 async function lockTarget(client, orderId) {
   const { rows } = await client.query(
     `SELECT o.*, c.grade FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
-      WHERE o.id = $1 FOR UPDATE OF o`,
+      WHERE o.id = $1 FOR NO KEY UPDATE OF o`,
     [orderId],
   );
   if (rows.length === 0) throw notFound('Ad');
@@ -599,7 +599,7 @@ async function takeAsk(client, ask, userId) {
 async function answerBid(client, userId, copyId, bid) {
   const { rows: copies } = await client.query(
     `SELECT id, release_id, grade, status FROM copies
-      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR UPDATE`,
+      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR NO KEY UPDATE`,
     [copyId, userId],
   );
   if (copies.length === 0) throw notFound('Copy');

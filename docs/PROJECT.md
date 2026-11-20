@@ -30,7 +30,9 @@ Read this before you start a part. If a rule needs to change, change it here in 
   `ctx.live.notifyUser(userId, message)` for private changes. Never before the commit.
 - **Database:** plain SQL with `$1` parameters, never string-built SQL. A schema change is a new numbered file in
   `server/migrations/` (never edit one that has run anywhere). Use `withTransaction` from `server/src/db/pool.js` when
-  more than one write must succeed together.
+  more than one write must succeed together. Lock rows with `FOR NO KEY UPDATE`, never `FOR UPDATE`: inserting a row
+  that references a user, copy or order makes Postgres take a KEY SHARE lock on it, which `FOR UPDATE` blocks, and that
+  deadlocks (Part 7's stress tests found it).
 - **Money** is whole cents as JavaScript numbers (`4050` = $40.50). The API sends prices as strings like `"40.50"`.
   Never use floating-point dollars. Starting play cash is $2,000 (Part 3).
 - **Security:** passwords are hashed with scrypt; the session cookie is httpOnly and SameSite=Lax and the database

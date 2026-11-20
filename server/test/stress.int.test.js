@@ -8,7 +8,8 @@
  * exchange's rules must hold and every current book must equal the database's.
  */
 import fc from 'fast-check';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { createApp } from '../src/app.js';
 import { mapRelease } from '../src/catalog/discogsMapping.js';
 import releaseFixture from '../src/catalog/fixtures/release-249504.json' with { type: 'json' };
 import { upsertRelease } from '../src/catalog/releasesRepo.js';
@@ -16,6 +17,7 @@ import { createPool } from '../src/db/pool.js';
 import { AppError } from '../src/errors.js';
 import { findBrokenRules } from '../src/orders/exchangeRules.js';
 import { OrderService } from '../src/orders/orderService.js';
+import { traders as tradersOf } from './traders.js';
 import {
   bookContents,
   bookFromDatabase,
@@ -267,6 +269,36 @@ describe('two server processes on one database', () => {
   });
 });
 
+describe('deadlocks', () => {
+  it('a purchase and a trade step between the same two people, at the same moment, both finish', async () => {
+    // What the random flow found: the purchase locks the buyer's wallet and then saves a
+    // trade, whose foreign key check needs the seller's users row; meanwhile the seller
+    // cancels an older sale to the same buyer, locking the seller's wallet and then the
+    // buyer's. With FOR UPDATE wallet locks, each waited for the other.
+    await freshExchange({ copiesEach: 0 });
+    const app = createApp(ctx, { rateLimit: false });
+    const { signUp, listCopy, placeBid, hookQueries } = tradersOf(ctx, app);
+    const seller = await signUp('sella'); // signs up first: the lower id, locked first
+    const buyer = await signUp('buyer');
+    const older = await listCopy(seller, '20.00');
+    const { trade } = (await buyer.post(`/api/orders/${older.order.id}/buy`, {}).expect(201)).body;
+    await listCopy(seller, '25.00');
+
+    // Hold the purchase between its wallet lock and the trade it saves.
+    hookQueries((sql) => (sql.includes('INSERT INTO orders') ? 300 : null));
+    const purchase = placeBid(buyer, '25.00', 1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const cancel = seller.post(`/api/trades/${trade.id}/cancel`, {});
+    const [bought, cancelled] = await Promise.all([purchase, cancel]);
+    vi.restoreAllMocks();
+
+    expect(bought.status).toBe(201);
+    expect(bought.body.trade).toMatchObject({ price: '25.00' });
+    expect(cancelled.status).toBe(200);
+    await expectConsistent();
+  });
+});
+
 describe('random order flow, many at once (property-based)', () => {
   it('whatever happens, in whatever order, the exchange still adds up', async () => {
     await fc.assert(
@@ -286,7 +318,9 @@ describe('random order flow, many at once (property-based)', () => {
           await expectConsistent();
         },
       ),
-      { numRuns: 25 },
+      // No shrinking: each run resets the database, so a shrink would take minutes. The
+      // counterexample printed is the whole failing run.
+      { numRuns: 25, endOnFailure: true },
     );
   }, 120_000);
 });

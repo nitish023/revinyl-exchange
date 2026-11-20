@@ -99,7 +99,7 @@ export async function listCrate(pool, userId, releaseId) {
 async function lockMyCopy(client, userId, copyId) {
   const { rows } = await client.query(
     `SELECT id, status, release_id FROM copies
-      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR UPDATE`,
+      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR NO KEY UPDATE`,
     [copyId, userId],
   );
   if (rows.length === 0) throw notFound('Copy');
