@@ -4,6 +4,7 @@
  */
 import { PricingService } from '../src/analytics/pricingService.js';
 import { AuctionService } from '../src/auctions/auctionService.js';
+import { BotService } from '../src/bots/botService.js';
 import { CatalogService } from '../src/catalog/catalogService.js';
 import { DiscogsUnavailableError } from '../src/catalog/discogsClient.js';
 import {
@@ -118,6 +119,7 @@ export function createTestContext() {
   // No caching in tests: every request sees the data the test just wrote.
   const pricing = new PricingService({ pool, ttlMs: 0 });
   const auctions = new AuctionService({ pool, live });
+  const bots = new BotService({ pool, orders, trades, pricing });
   return {
     config,
     pool,
@@ -129,6 +131,7 @@ export function createTestContext() {
     collection,
     pricing,
     auctions,
+    bots,
   };
 }
 

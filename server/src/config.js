@@ -20,6 +20,8 @@ const schema = z.object({
     // Discogs allows 60 a minute for the whole site; we stay under it.
     z.coerce.number().int().min(1).max(60).default(30),
   ),
+  // Part 19: the market-making bots trade every 30 seconds unless this is "off".
+  BOTS: z.preprocess(blankAsMissing, z.enum(['on', 'off']).default('on')),
 });
 
 /**

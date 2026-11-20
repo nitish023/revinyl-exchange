@@ -71,6 +71,7 @@ function toAd(row) {
         completed: row.sellerSales ?? 0,
         refunded: row.sellerRefunds ?? 0,
       }),
+      ...(row.sellerIsBot && { marketMaker: true }),
     },
   };
 }
@@ -83,7 +84,8 @@ function toWanted(row) {
     minGrade: row.minGrade,
     note: row.note,
     postedAt: row.createdAt.toISOString(),
-    buyer: { trades: row.buyerTrades },
+    // Part 19: a market maker's ad says so (and only then is the key there).
+    buyer: { trades: row.buyerTrades, ...(row.buyerIsBot && { marketMaker: true }) },
   };
 }
 
