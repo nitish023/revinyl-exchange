@@ -31,6 +31,7 @@
 import { formatCents, gradeByRank, placeOrderSchema, sellToSchema } from '../../../shared/index.js';
 import { withTransaction } from '../db/pool.js';
 import { postJournal, tradeJournals } from '../ledger/ledger.js';
+import { sellerFeeFor } from '../sellers/sellerRecord.js';
 import { AppError, notFound } from '../errors.js';
 import { OrderBook } from '../market/orderBook.js';
 import { KeyedSerialQueue } from './keyedSerialQueue.js';
@@ -665,8 +666,8 @@ async function recordTrade(client, incoming, trade, releaseId) {
 
   const { rows } = await client.query(
     `INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
-                         buyer_id, seller_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                         buyer_id, seller_id, seller_fee_cents)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
     [
       releaseId,
       trade.copyId,
@@ -676,6 +677,8 @@ async function recordTrade(client, incoming, trade, releaseId) {
       trade.askOrderId,
       trade.buyerId,
       trade.sellerId,
+      // The seller's fee at their level right now (Part 12), taken from the payout later.
+      await sellerFeeFor(client, trade.sellerId, trade.priceCents),
     ],
   );
 

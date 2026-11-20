@@ -20,6 +20,8 @@ function ask(overrides = {}) {
     photos: 0,
     sellerName: 'groovegarden',
     sellerTrades: 3,
+    sellerSales: 3,
+    sellerRefunds: 0,
     ...overrides,
   };
 }
@@ -64,7 +66,12 @@ describe('FOR SALE ads', () => {
     const [ad] = market.forSale[0].ads;
     expect(ad.price).toBe('42.50');
     expect(ad.copy.condition).toBe('VG+, generic sleeve');
-    expect(ad.seller).toEqual({ name: 'groovegarden', trades: 3 });
+    // Part 12: three settled sales, all completed.
+    expect(ad.seller).toEqual({
+      name: 'groovegarden',
+      trades: 3,
+      reliability: '100% of sales completed',
+    });
   });
 });
 

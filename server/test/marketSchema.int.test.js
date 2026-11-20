@@ -44,7 +44,12 @@ describe('demo seed', () => {
   it('only moves money between traders', async () => {
     await seedDemo(ctx.pool);
     const [{ total }] = await query('SELECT sum(cash_cents)::bigint AS total FROM users');
-    expect(total).toBe(DEMO_TRADERS.length * 200_000);
+    // What isn't in a trader's wallet went to reVINYL as sellers' fees (Part 12).
+    const [{ fees }] = await query(
+      `SELECT coalesce(sum(amount_cents), 0)::bigint AS fees FROM ledger_entries WHERE account = 'fees'`,
+    );
+    expect(fees).toBeGreaterThan(0);
+    expect(total + fees).toBe(DEMO_TRADERS.length * 200_000);
   });
 
   it('gives every listed copy one open ask from its owner, and no other copy any', async () => {

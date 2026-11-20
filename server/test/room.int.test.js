@@ -142,8 +142,8 @@ describe('the ledger', () => {
                          FROM (SELECT *, row_number() OVER (ORDER BY id) AS n FROM asks) a
                          JOIN (SELECT *, row_number() OVER (ORDER BY id) AS n FROM bids) b USING (n))
        INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
-                           buyer_id, seller_id, status)
-       SELECT $3, copy_id, 6, 1000, bid_id, ask_id, $1, $2, 'completed' FROM paired
+                           buyer_id, seller_id, status, shipped_at, settled_at)
+       SELECT $3, copy_id, 6, 1000, bid_id, ask_id, $1, $2, 'completed', now(), now() FROM paired
        RETURNING *`,
       [buyer, seller, FIXTURE_RELEASE_ID],
     );

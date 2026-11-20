@@ -60,15 +60,18 @@ describe('what each step posts', () => {
     await step(seller, trade.id, 'ship').expect(200);
     await step(buyer, trade.id, 'received').expect(200);
     const { lines } = await statementOf(seller);
-    expect(lines.map(lineSummary)[0]).toEqual(['trade_payout', '40.00', '2040.00']);
+    // $40 less the 12% fee of a level 1 seller (Part 12).
+    expect(lines.map(lineSummary)[0]).toEqual(['trade_payout', '35.20', '2035.20']);
     expect(lines[0]).toMatchObject({
-      description: 'Sold Never Gonna Give You Up',
+      description: 'Sold Never Gonna Give You Up (after a $4.80 fee)',
       tradeId: trade.id,
       releaseId: trade.releaseId,
     });
-    expect((await request(app).get('/api/books').expect(200)).body.books).toMatchObject({
-      inWallets: '4000.00',
+    expect((await request(app).get('/api/books').expect(200)).body.books).toEqual({
+      issued: '4000.00',
+      inWallets: '3995.20',
       inEscrow: '0.00',
+      fees: '4.80',
     });
   });
 

@@ -17,6 +17,7 @@ import { ledgerRouter } from './ledger/routes.js';
 import { marketRouter } from './market/routes.js';
 import { ordersRouter } from './orders/routes.js';
 import { roomRouter } from './room/routes.js';
+import { sellersRouter } from './sellers/routes.js';
 import { tradesRouter } from './trades/routes.js';
 
 const CLIENT_DIST = fileURLToPath(new URL('../../client/dist/', import.meta.url));
@@ -62,6 +63,7 @@ export function createApp(ctx, { rateLimit = true } = {}) {
   app.use('/api', collectionRouter(ctx, { rateLimit }));
   app.use('/api', roomRouter(ctx));
   app.use('/api', ledgerRouter(ctx));
+  app.use('/api', sellersRouter(ctx));
   app.use('/api', (_req, _res, next) => next(notFound('Endpoint')));
 
   if (ctx.config.isProduction && existsSync(CLIENT_DIST)) {

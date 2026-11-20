@@ -10,6 +10,10 @@ import { buildMarket } from './marketView.js';
 /** How many sales to read: enough for 30 days of a busy pressing plus the sale before each grade. */
 const SALES_TO_READ = 200;
 
+/** A seller's settled sales, for their reliability (Part 12): completed and refunded. */
+const SELLER_RECORD = `(SELECT count(*) FROM trades t WHERE t.seller_id = u.id AND t.status = 'completed') AS "sellerSales",
+              (SELECT count(*) FROM trades t WHERE t.seller_id = u.id AND t.status = 'refunded') AS "sellerRefunds"`;
+
 const TRADE_COUNT = `(SELECT count(*) FROM trades t
                       WHERE t.status = 'completed' AND (t.buyer_id = u.id OR t.seller_id = u.id))`;
 
@@ -24,7 +28,8 @@ export async function loadMarket(db, releaseId, now = Date.now()) {
       `SELECT o.id AS "orderId", o.price_cents AS "priceCents", o.created_at AS "createdAt",
               c.id AS "copyId", c.grade, c.sleeve_grade AS "sleeveGrade", c.flags, c.headline, c.notes,
               (SELECT count(*) FROM copy_photos p WHERE p.copy_id = c.id) AS photos,
-              u.display_name AS "sellerName", ${TRADE_COUNT} AS "sellerTrades"
+              u.display_name AS "sellerName", ${TRADE_COUNT} AS "sellerTrades",
+              ${SELLER_RECORD}
          FROM orders o
          JOIN copies c ON c.id = o.copy_id
          JOIN users u ON u.id = o.user_id

@@ -4,6 +4,7 @@
  * marketRepo.js does the SQL and calls buildMarket.
  */
 import { conditionText } from '../../../shared/copies.js';
+import { reliabilityText } from '../../../shared/fees.js';
 import { RECENT_SALES_LIMIT, REPORT_WINDOW_DAYS } from '../../../shared/market.js';
 import { formatCents } from '../../../shared/orders.js';
 
@@ -23,6 +24,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * @property {number} photos
  * @property {string} sellerName
  * @property {number} sellerTrades
+ * @property {number} [sellerSales] completed trades as the seller (Part 12)
+ * @property {number} [sellerRefunds] refunded trades as the seller
  *
  * @typedef {object} BidRow
  * @property {number} orderId
@@ -60,7 +63,15 @@ function toAd(row) {
       notes: row.notes,
       photos: row.photos,
     },
-    seller: { name: row.sellerName, trades: row.sellerTrades },
+    seller: {
+      name: row.sellerName,
+      trades: row.sellerTrades,
+      // Part 12: "New seller" until three settled sales, then e.g. "98% of sales completed".
+      reliability: reliabilityText({
+        completed: row.sellerSales ?? 0,
+        refunded: row.sellerRefunds ?? 0,
+      }),
+    },
   };
 }
 
