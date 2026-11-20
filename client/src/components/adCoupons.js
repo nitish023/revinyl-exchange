@@ -16,7 +16,7 @@ import { standingOrNull } from '../lib/fees.js';
 import { pricingOrNull } from '../lib/pricing.js';
 import { errorsFromUnknown } from '../lib/forms.js';
 import { actionButton } from './actionButton.js';
-import { addCopyForm, minGradeText, sellForm, wantedForm } from './adForms.js';
+import { addCopyForm, auctionForm, minGradeText, sellForm, wantedForm } from './adForms.js';
 import { adSettingsLine } from './adSettings.js';
 import { errorState, loadingState } from './states.js';
 
@@ -69,6 +69,10 @@ export function adCoupons({ release, user, onPosted }) {
             onDone: (message) => finish(message, true),
           }),
           wantedForm({ release, wallet, onDone: (message) => finish(message, true) }),
+          auctionForm({
+            copies: copies.filter((copy) => copy.status === 'in_crate'),
+            onDone: (message) => finish(message, true),
+          }),
         ),
         yourAds(orders, (message) => finish(message, true)),
       );
