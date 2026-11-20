@@ -77,39 +77,40 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 
 ## API so far
 
-| Method | Path                                                                                                  | Who    | Part |
-| ------ | ----------------------------------------------------------------------------------------------------- | ------ | ---- |
-| GET    | `/api/health`                                                                                         | anyone | 2    |
-| POST   | `/api/auth/register` `{ email, displayName, password }`                                               | anyone | 2    |
-| POST   | `/api/auth/login` `{ email, password }`                                                               | anyone | 2    |
-| POST   | `/api/auth/logout`                                                                                    | anyone | 2    |
-| GET    | `/api/auth/me`                                                                                        | anyone | 2    |
-| GET    | `/api/catalog/search?q=&page=&format=lp\|12in\|7in&year=`                                             | anyone | 2    |
-| GET    | `/api/releases/:id`                                                                                   | anyone | 2    |
-| GET    | `/api/wallet`                                                                                         | user   | 3    |
-| GET    | `/api/crate?releaseId=`                                                                               | user   | 3    |
-| POST   | `/api/crate` `{ releaseId, grade, sleeveGrade, flags, headline, notes }`                              | user   | 3    |
-| DELETE | `/api/crate/:id`                                                                                      | user   | 3    |
-| POST   | `/api/crate/:id/photos` (the image as the body)                                                       | user   | 3    |
-| GET    | `/api/copies/:id/photos/:position`                                                                    | anyone | 3    |
-| GET    | `/api/orders?status=open\|filled\|cancelled&releaseId=`                                               | user   | 3    |
-| POST   | `/api/orders` `{ side: 'bid', releaseId, price, minGrade, note }` or `{ side: 'ask', copyId, price }` | user   | 3    |
-| POST   | `/api/orders` also takes `expiresInDays` (7/30/60/90/null) and `repriceStep` + `repriceLimit`         | user   | 15   |
-| DELETE | `/api/orders/:id`                                                                                     | user   | 3    |
-| GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)                                           | anyone | 4    |
-| POST   | `/api/orders/:id/buy` (Buy this copy: price and grade come from the ad)                               | user   | 5    |
-| POST   | `/api/orders/:id/sell` `{ copyId }` (Sell to them: one of your copies, at the ad's price)             | user   | 5    |
-| GET    | `/api/trades?status=awaiting_shipment\|shipped\|completed\|refunded`                                  | user   | 5    |
-| POST   | `/api/trades/:id/ship` or `/cancel` (seller), `/received` or `/refund` (buyer)                        | user   | 5    |
-| GET    | `/api/room` (your Listening Room: wallet, shelf, wanted ads, ledger, counter, value)                  | user   | 6    |
-| GET    | `/api/collection/discogs?username=` (preview a public Discogs collection)                             | user   | 6    |
-| POST   | `/api/collection/discogs` `{ username, items: [{ instanceId, grade, sleeveGrade }] }`                 | user   | 6    |
-| GET    | `/api/wallet/statement?before=` (your cash, line by line from the ledger, with running balance)       | user   | 11   |
-| GET    | `/api/books` (reVINYL's books: issued, in wallets, in escrow, fees)                                   | anyone | 11   |
-| GET    | `/api/seller` (your level, fee, trust score, last 90 days, and what the next level needs)             | user   | 12   |
-| GET    | `/api/releases/:id/pricing` (fair value per grade with 80% ranges, and the time-to-sale model)        | anyone | 13   |
-| GET    | `/api/releases/:id/history` (daily candles in VG+ terms, volatility, 30-day change, book per grade)   | anyone | 14   |
-| WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                             | anyone | 4    |
+| Method | Path                                                                                                     | Who    | Part |
+| ------ | -------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| GET    | `/api/health`                                                                                            | anyone | 2    |
+| POST   | `/api/auth/register` `{ email, displayName, password }`                                                  | anyone | 2    |
+| POST   | `/api/auth/login` `{ email, password }`                                                                  | anyone | 2    |
+| POST   | `/api/auth/logout`                                                                                       | anyone | 2    |
+| GET    | `/api/auth/me`                                                                                           | anyone | 2    |
+| GET    | `/api/catalog/search?q=&page=&format=lp\|12in\|7in&year=`                                                | anyone | 2    |
+| GET    | `/api/releases/:id`                                                                                      | anyone | 2    |
+| GET    | `/api/wallet`                                                                                            | user   | 3    |
+| GET    | `/api/crate?releaseId=`                                                                                  | user   | 3    |
+| POST   | `/api/crate` `{ releaseId, grade, sleeveGrade, flags, headline, notes }`                                 | user   | 3    |
+| DELETE | `/api/crate/:id`                                                                                         | user   | 3    |
+| POST   | `/api/crate/:id/photos` (the image as the body)                                                          | user   | 3    |
+| GET    | `/api/copies/:id/photos/:position`                                                                       | anyone | 3    |
+| GET    | `/api/orders?status=open\|filled\|cancelled&releaseId=`                                                  | user   | 3    |
+| POST   | `/api/orders` `{ side: 'bid', releaseId, price, minGrade, note }` or `{ side: 'ask', copyId, price }`    | user   | 3    |
+| POST   | `/api/orders` also takes `expiresInDays` (7/30/60/90/null) and `repriceStep` + `repriceLimit`            | user   | 15   |
+| DELETE | `/api/orders/:id`                                                                                        | user   | 3    |
+| GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)                                              | anyone | 4    |
+| POST   | `/api/orders/:id/buy` (Buy this copy: price and grade come from the ad)                                  | user   | 5    |
+| POST   | `/api/orders/:id/sell` `{ copyId }` (Sell to them: one of your copies, at the ad's price)                | user   | 5    |
+| GET    | `/api/trades?status=awaiting_shipment\|shipped\|completed\|refunded`                                     | user   | 5    |
+| POST   | `/api/trades/:id/ship` or `/cancel` (seller), `/received` or `/refund` (buyer)                           | user   | 5    |
+| GET    | `/api/room` (your Listening Room: wallet, shelf, wanted ads, ledger, counter, value)                     | user   | 6    |
+| GET    | `/api/collection/discogs?username=` (preview a public Discogs collection)                                | user   | 6    |
+| POST   | `/api/collection/discogs` `{ username, items: [{ instanceId, grade, sleeveGrade }] }`                    | user   | 6    |
+| GET    | `/api/wallet/statement?before=` (your cash, line by line from the ledger, with running balance)          | user   | 11   |
+| GET    | `/api/books` (reVINYL's books: issued, in wallets, in escrow, fees)                                      | anyone | 11   |
+| GET    | `/api/seller` (your level, fee, trust score, last 90 days, and what the next level needs)                | user   | 12   |
+| GET    | `/api/releases/:id/pricing` (fair value per grade with 80% ranges, and the time-to-sale model)           | anyone | 13   |
+| GET    | `/api/releases/:id/history` (daily candles in VG+ terms, volatility, 30-day change, book per grade)      | anyone | 14   |
+| GET    | `/api/releases/:id/auctions`; `POST /api/auctions`, `/api/auctions/:id/bids`; `DELETE /api/auctions/:id` | mixed  | 16   |
+| WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                                | anyone | 4    |
 
 ## Build plan
 
@@ -138,7 +139,7 @@ basic marketplace). Financial ideas from StockX and real exchanges, built on the
 | 13  | Sauransh | Fair value per grade (robust weighted regression), suggested price and chance of selling | ✅ done |
 | 14  | Sauransh | Price history (daily candles, volatility, spread) and the depth chart                    | ✅ done |
 | 15  | Sauransh | Ads that expire, and automatic repricing rules for sellers                               | ✅ done |
-| 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ☐       |
+| 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ✅ done |
 | 17  | Sauransh | Market surveillance: wash trading and outlier sales, kept out of prices                  | ☐       |
 | 18  | Sauransh | The reVINYL 30 index (volume-weighted, divisor-adjusted) and portfolio profit and loss   | ☐       |
 | 19  | Sauransh | Market-making bots (inventory-aware quotes around fair value) and a market simulation    | ☐       |
