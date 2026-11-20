@@ -44,7 +44,7 @@ const plural = (count, word, many = `${word}s`) => `${count} ${count === 1 ? wor
  * and a seller with too few settled sales to judge leaves the reliability out (Part 12).
  */
 export function sellerLine(seller) {
-  if (seller.marketMaker) return `${seller.name}, reVINYL’s market maker.`;
+  if (seller.bot) return `${seller.name}, a reVINYL trading bot.`;
   if (seller.trades === 0) return `${seller.name}, new to reVINYL.`;
   const reliable =
     seller.reliability && seller.reliability !== 'New seller' ? `, ${seller.reliability}` : '';
@@ -53,7 +53,7 @@ export function sellerLine(seller) {
 
 /** Buyers are never named: "Buyer, 9 trades." */
 export function buyerLine(buyer) {
-  if (buyer.marketMaker) return 'reVINYL’s market maker.';
+  if (buyer.bot) return 'A reVINYL trading bot.';
   return buyer.trades === 0 ? 'New buyer.' : `Buyer, ${plural(buyer.trades, 'trade')}.`;
 }
 

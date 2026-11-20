@@ -79,11 +79,11 @@ describe('traders', () => {
     );
   });
 
-  it('labels the market maker’s ads, on both sides (Part 19)', () => {
-    expect(sellerLine({ name: 'desk_marlowe', trades: 12, marketMaker: true })).toBe(
-      'desk_marlowe, reVINYL’s market maker.',
+  it('labels the trading bots’ ads, on both sides (Part 19)', () => {
+    expect(sellerLine({ name: 'desk_marlowe', trades: 12, bot: true })).toBe(
+      'desk_marlowe, a reVINYL trading bot.',
     );
-    expect(buyerLine({ trades: 3, marketMaker: true })).toBe('reVINYL’s market maker.');
+    expect(buyerLine({ trades: 3, bot: true })).toBe('A reVINYL trading bot.');
   });
 
   it('never names a buyer', () => {

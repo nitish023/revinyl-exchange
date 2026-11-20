@@ -93,6 +93,34 @@ describe('the market-making bots', () => {
     expect(ask.price_cents / 100).toBeGreaterThan(fair);
   });
 
+  it('the mean-reversion trader buys a dip, and stays out while prices are normal', async () => {
+    const buyer = await aMarket();
+    await ctx.bots.tick();
+    const satoOrders = () =>
+      query(
+        `SELECT o.side, o.price_cents FROM orders o JOIN users u ON u.id = o.user_id
+          WHERE u.display_name = 'desk_sato' AND o.status = 'open'`,
+      );
+    expect(await satoOrders()).toEqual([]); // the last sale was $42: nothing unusual
+    // A VG+ copy goes for $25, far under fair value: a hasty seller answers a collector's
+    // low WANTED ad. (Listed for $25, it would have sold to the market maker's higher bid:
+    // the maker absorbs dips, exactly as the simulation shows.)
+    const { order: lowBid } = (
+      await buyer
+        .post('/api/orders', { side: 'bid', releaseId: RELEASE, price: '25', minGrade: VG_PLUS })
+        .expect(201)
+    ).body;
+    const seller = await signUp('hasty');
+    const copy = (
+      await seller
+        .post('/api/crate', { releaseId: RELEASE, grade: VG_PLUS, sleeveGrade: VG_PLUS })
+        .expect(201)
+    ).body.copy;
+    await seller.post(`/api/orders/${lowBid.id}/sell`, { copyId: copy.id }).expect(201);
+    await ctx.bots.tick();
+    expect(await satoOrders()).toEqual([{ side: 'bid', price_cents: 2550 }]); // $25 + 2%
+  });
+
   it('leave their ads alone while the quote hasn’t moved', async () => {
     await aMarket();
     await ctx.bots.tick();
@@ -132,9 +160,9 @@ describe('the market-making bots', () => {
     await ctx.bots.tick();
     const { market } = (await request(app).get(`/api/releases/${RELEASE}/market`).expect(200)).body;
     const ads = market.forSale.flatMap((group) => group.ads);
-    expect(ads.find((ad) => ad.seller.marketMaker)).toMatchObject({
-      seller: { name: expect.stringMatching(/^desk_/), marketMaker: true },
+    expect(ads.find((ad) => ad.seller.bot)).toMatchObject({
+      seller: { name: expect.stringMatching(/^desk_/), bot: true },
     });
-    expect(market.wanted.find((ad) => ad.buyer.marketMaker)).toBeTruthy();
+    expect(market.wanted.find((ad) => ad.buyer.bot)).toBeTruthy();
   });
 });

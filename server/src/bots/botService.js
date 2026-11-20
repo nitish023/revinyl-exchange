@@ -12,15 +12,23 @@
  *      quotes marketMaker.js gives for the pressing's fair value (Part 13), its spread, and
  *      the bot's stock of that grade. An ad is replaced only when its quote has moved more
  *      than 3%, so the book isn't churned for nothing.
- * A bot starts each pressing with two copies of stock, like a dealer opening a bin.
+ *   3. the mean-reversion trader (desk_sato) watches the same pressings and acts on big
+ *      moves (meanReversion.js): bids just over a sale well under fair value, asks just under
+ *      a sale well over it, and offers what it bought at fair value once prices settle.
+ * A market maker starts each pressing with two copies of stock, like a dealer opening a
+ * bin; the mean-reversion trader only holds what it has bought.
  */
 import { randomBytes } from 'node:crypto';
 import { formatCents } from '../../../shared/index.js';
 import { hashPassword } from '../auth/passwords.js';
 import { AppError } from '../errors.js';
 import { quote } from '../sim/marketMaker.js';
+import { reversionOrders } from '../sim/meanReversion.js';
 
-export const BOT_NAMES = Object.freeze(['desk_marlowe', 'desk_okafor']);
+/** Two market makers share out the pressings; one mean-reversion trader watches them all. */
+export const MAKER_BOTS = Object.freeze(['desk_marlowe', 'desk_okafor']);
+export const REVERSION_BOT = 'desk_sato';
+export const BOT_NAMES = Object.freeze([...MAKER_BOTS, REVERSION_BOT]);
 const MAX_PRESSINGS = 12;
 const STARTING_STOCK = 2;
 /** Replace an ad only when its quote has moved by more than this share. */
@@ -82,9 +90,12 @@ export class BotService {
       let chores = 0;
       for (const bot of bots) chores += await this.#doChores(bot);
       const pressings = await this.#pressingsToMake();
+      const makers = bots.filter((bot) => MAKER_BOTS.includes(bot.name));
+      const reverter = bots.find((bot) => bot.name === REVERSION_BOT);
       let quotes = 0;
       for (const [i, pressing] of pressings.entries()) {
-        quotes += await this.#makeMarket(bots[i % bots.length], pressing);
+        quotes += await this.#makeMarket(makers[i % makers.length], pressing);
+        quotes += await this.#revert(reverter, pressing);
       }
       return { chores, quotes };
     } catch (error) {
@@ -133,19 +144,56 @@ export class BotService {
       .filter((pressing) => pressing.fit);
   }
 
-  /** Keep this bot's two ads on a pressing at its quotes. Returns how many ads it placed. */
-  async #makeMarket(bot, { releaseId, grade, fit }) {
-    await this.#stockUp(bot, releaseId, grade);
-    const { rows: copies } = await this.pool.query(
+  /** The bot's copies of a pressing's grade that it could sell. */
+  async #stock(bot, releaseId, grade) {
+    const { rows } = await this.pool.query(
       `SELECT id, status FROM copies
         WHERE owner_id = $1 AND release_id = $2 AND grade = $3 AND removed_at IS NULL
           AND status IN ('in_crate', 'listed')
         ORDER BY id`,
       [bot.id, releaseId, grade],
     );
+    return rows;
+  }
+
+  /** A market maker keeps its two ads at its quotes. Returns how many ads it placed. */
+  async #makeMarket(bot, { releaseId, grade, fit }) {
+    await this.#stockUp(bot, releaseId, grade);
+    const copies = await this.#stock(bot, releaseId, grade);
     const fairCents = fit.grades[grade - 1].fairCents;
     const q = quote({ fairCents, sigma: fit.sigma, inventory: copies.length });
+    return this.#keepAds(bot, { releaseId, grade, copies }, q);
+  }
 
+  /**
+   * The mean-reversion trader acts on how far the pressing's last sale (restated to this
+   * grade) strayed from fair value: buy a dip, sell a spike, or offer stock at fair value.
+   */
+  async #revert(bot, { releaseId, grade, fit }) {
+    const { rows } = await this.pool.query(
+      `SELECT grade, price_cents FROM trades
+        WHERE release_id = $1 AND status <> 'refunded' ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [releaseId],
+    );
+    if (rows.length === 0) return 0;
+    const lastCents = rows[0].price_cents * Math.exp(fit.gradeStep * (grade - rows[0].grade));
+    const copies = await this.#stock(bot, releaseId, grade);
+    const orders = reversionOrders({
+      fairCents: fit.grades[grade - 1].fairCents,
+      lastCents,
+      sigma: fit.sigma,
+      stock: copies.length,
+    });
+    return this.#keepAds(bot, { releaseId, grade, copies }, orders);
+  }
+
+  /**
+   * Keep the bot's ads on a pressing's grade at the prices wanted: an ad within 3% stays,
+   * any other is cancelled, a missing one is placed (an ask only with a copy to sell), and
+   * a side the strategy doesn't want (null) has its ads taken down.
+   * @returns {Promise<number>} how many ads it placed
+   */
+  async #keepAds(bot, { releaseId, grade, copies }, { bidCents, askCents }) {
     const { rows: open } = await this.pool.query(
       `SELECT o.id, o.side, o.price_cents FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
         WHERE o.user_id = $1 AND o.release_id = $2 AND o.status = 'open'
@@ -154,17 +202,18 @@ export class BotService {
     );
     let placed = 0;
     for (const [side, wanted] of [
-      ['bid', q.bidCents],
-      ['ask', q.askCents],
+      ['bid', bidCents],
+      ['ask', askCents],
     ]) {
       const current = open.filter((order) => order.side === side);
-      const keep = current.find(
-        (order) => Math.abs(order.price_cents - wanted) / wanted <= REQUOTE_SHARE,
-      );
+      const keep =
+        wanted === null
+          ? null
+          : current.find((order) => Math.abs(order.price_cents - wanted) / wanted <= REQUOTE_SHARE);
       for (const order of current) {
         if (order !== keep) await ignoreRefusals(() => this.orders.cancel(bot, order.id));
       }
-      if (keep) continue;
+      if (keep || wanted === null) continue;
       const price = formatCents(wanted);
       if (side === 'bid') {
         await ignoreRefusals(() =>
