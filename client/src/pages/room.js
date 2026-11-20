@@ -7,6 +7,7 @@
 import { conditionFlagLabel, gradeByRank } from '../../../shared/index.js';
 import { actionButton } from '../components/actionButton.js';
 import { cover } from '../components/cover.js';
+import { statementSection } from '../components/statement.js';
 import { emptyState, errorState, loadingState } from '../components/states.js';
 import { tradeActions } from '../components/tradeActions.js';
 import { h, replaceChildren } from '../dom.js';
@@ -240,7 +241,7 @@ function ledgerSection(room, done) {
   );
 }
 
-function roomView(room, flash, done) {
+function roomView(room, flash, done, signal) {
   document.title = 'Your Listening Room | reVINYL';
   return [
     h(
@@ -254,6 +255,7 @@ function roomView(room, flash, done) {
     h('div', { class: 'room-top' }, leadParagraph(room), counterBox(room.counter)),
     shelfSection(room, done),
     h('div', { class: 'room-columns' }, wantedSection(room, done), ledgerSection(room, done)),
+    statementSection({ signal }),
   ];
 }
 
@@ -286,7 +288,7 @@ export const roomPage = (ctx) => {
     try {
       const { room } = await api.room(ctx.signal);
       if (ctx.signal.aborted) return;
-      replaceChildren(root, ...roomView(room, flash, done));
+      replaceChildren(root, ...roomView(room, flash, done, ctx.signal));
     } catch (error) {
       if (isAbortError(error) || ctx.signal.aborted) return;
       replaceChildren(
