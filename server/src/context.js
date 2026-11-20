@@ -2,6 +2,7 @@
  * Everything the routes share: settings, the database pool and services.
  * Tests build their own context with a fake Discogs (server/test/helpers.js).
  */
+import { PricingService } from './analytics/pricingService.js';
 import { CatalogService } from './catalog/catalogService.js';
 import { DiscogsClient } from './catalog/discogsClient.js';
 import { RateWindow } from './catalog/rateWindow.js';
@@ -23,6 +24,7 @@ import { TradeService } from './trades/tradeService.js';
  * @property {OrderService} orders places and cancels orders, and keeps each pressing's book
  * @property {TradeService} trades ships, completes and refunds trades
  * @property {CollectionImport} collection previews and imports Discogs collections
+ * @property {PricingService} pricing fair value per grade and the chance of selling (Part 13)
  */
 
 /** @param {import('./config.js').Config} config @returns {AppContext} */
@@ -57,5 +59,6 @@ export function createContext(config) {
     orders: new OrderService({ pool, catalog, live }),
     trades: new TradeService({ pool, live }),
     collection: new CollectionImport({ pool, source: discogs }),
+    pricing: new PricingService({ pool }),
   };
 }

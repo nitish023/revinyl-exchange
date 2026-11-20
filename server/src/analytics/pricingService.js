@@ -1,0 +1,133 @@
+/**
+ * Fair value and the chance of selling, for a pressing (Part 13). Spec:
+ * docs/parts/part-13-fair-value.md. Reads sales and past ads, and fits the models in
+ * fairValue.js and saleOdds.js.
+ *
+ * Two things are learned from the whole market and kept for a minute, since they move
+ * slowly and take one pass over every sale and ad: the grade premium (the prior for every
+ * pressing's own fit) and the time-to-sale model. A pressing's own fair value is fitted on
+ * each request: it's one small query and a 2x2 solve.
+ */
+import { formatCents, gradeByRank } from '../../../shared/index.js';
+import { fitFairValue, HALF_LIFE_DAYS, pooledGradeStep } from './fairValue.js';
+import { fitSaleOdds } from './saleOdds.js';
+
+/** Sales older than this say nothing useful about today's prices (weight < 0.02%). */
+const SALES_WINDOW_DAYS = 365;
+const MARKET_TTL_MS = 60_000;
+const DAY_MS = 86_400_000;
+/** An ad that filled the moment it was placed still counts, as a sale after a minute. */
+const MIN_DAYS_UP = 1 / 1440;
+
+/** Every sale in the window that wasn't refunded, by pressing. */
+async function loadSales(db, now, releaseId = null) {
+  const { rows } = await db.query(
+    `SELECT id, release_id, grade, price_cents, created_at FROM trades
+      WHERE status <> 'refunded' AND created_at > $1
+        AND ($2::bigint IS NULL OR release_id = $2)
+      ORDER BY id`,
+    [new Date(now - SALES_WINDOW_DAYS * DAY_MS), releaseId],
+  );
+  const byRelease = new Map();
+  for (const row of rows) {
+    const sales = byRelease.get(row.release_id) ?? [];
+    sales.push({
+      id: row.id,
+      grade: row.grade,
+      priceCents: row.price_cents,
+      at: row.created_at.getTime(),
+    });
+    byRelease.set(row.release_id, sales);
+  }
+  return byRelease;
+}
+
+export class PricingService {
+  /** @type {{ at: number, value: Promise<{ gradeStep: number, odds: object }> } | null} */
+  #market = null;
+
+  /**
+   * @param {{ pool: import('pg').Pool, now?: () => number, ttlMs?: number }} deps
+   */
+  constructor({ pool, now = Date.now, ttlMs = MARKET_TTL_MS }) {
+    this.pool = pool;
+    this.now = now;
+    this.ttlMs = ttlMs;
+  }
+
+  /** Forget what was learned from the whole market (tests; a big change in the data). */
+  refresh() {
+    this.#market = null;
+  }
+
+  /**
+   * The market-wide grade premium and time-to-sale model, cached for a minute. A failed
+   * load isn't cached, so the next request tries again.
+   */
+  #learnFromMarket() {
+    const now = this.now();
+    if (this.#market && now - this.#market.at < this.ttlMs) return this.#market.value;
+    const value = (async () => {
+      const salesByRelease = await loadSales(this.pool, now);
+      const gradeStep = pooledGradeStep(salesByRelease);
+      // Each pressing's fair value per grade, to measure every past ad against.
+      const fairByRelease = new Map();
+      for (const [releaseId, sales] of salesByRelease) {
+        fairByRelease.set(releaseId, fitFairValue(sales, { now, priorStep: gradeStep }));
+      }
+      const { rows } = await this.pool.query(
+        `SELECT o.release_id, o.price_cents, o.status, o.created_at, o.closed_at, c.grade
+           FROM orders o JOIN copies c ON c.id = o.copy_id
+          WHERE o.side = 'ask' AND o.target_order_id IS NULL AND o.created_at > $1`,
+        [new Date(now - SALES_WINDOW_DAYS * DAY_MS)],
+      );
+      const ads = [];
+      for (const row of rows) {
+        const fair = fairByRelease.get(row.release_id);
+        if (!fair) continue; // a pressing that never sold has no fair value to compare to
+        const end = row.closed_at ? row.closed_at.getTime() : now;
+        ads.push({
+          x: Math.log(row.price_cents / fair.grades[row.grade - 1].fairCents),
+          days: Math.max((end - row.created_at.getTime()) / DAY_MS, MIN_DAYS_UP),
+          sold: row.status === 'filled',
+        });
+      }
+      return { gradeStep, odds: fitSaleOdds(ads) };
+    })();
+    this.#market = { at: now, value };
+    value.catch(() => {
+      if (this.#market?.value === value) this.#market = null;
+    });
+    return value;
+  }
+
+  /**
+   * A pressing's fair value per grade and the time-to-sale model, as the API sends them.
+   * @param {number} releaseId
+   */
+  async pricing(releaseId) {
+    const now = this.now();
+    const [{ gradeStep, odds }, byRelease] = await Promise.all([
+      this.#learnFromMarket(),
+      loadSales(this.pool, now, releaseId),
+    ]);
+    const fair = fitFairValue(byRelease.get(releaseId) ?? [], { now, priorStep: gradeStep });
+    return {
+      fairValue: fair && {
+        grades: fair.grades.map((row) => ({
+          grade: row.grade,
+          code: gradeByRank(row.grade).code,
+          fair: formatCents(row.fairCents),
+          low: formatCents(row.lowCents),
+          high: formatCents(row.highCents),
+          sales: row.sales,
+        })),
+        gradeStep: Math.round((Math.exp(fair.gradeStep) - 1) * 1000) / 1000,
+        salesUsed: fair.salesUsed,
+        outliers: fair.outliers.length,
+        halfLifeDays: HALF_LIFE_DAYS,
+      },
+      odds: { alpha: odds.alpha, beta: odds.beta, ads: odds.ads, sold: odds.sold },
+    };
+  }
+}
