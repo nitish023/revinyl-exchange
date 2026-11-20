@@ -94,6 +94,7 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/copies/:id/photos/:position`                                                                    | anyone | 3    |
 | GET    | `/api/orders?status=open\|filled\|cancelled&releaseId=`                                               | user   | 3    |
 | POST   | `/api/orders` `{ side: 'bid', releaseId, price, minGrade, note }` or `{ side: 'ask', copyId, price }` | user   | 3    |
+| POST   | `/api/orders` also takes `expiresInDays` (7/30/60/90/null) and `repriceStep` + `repriceLimit`         | user   | 15   |
 | DELETE | `/api/orders/:id`                                                                                     | user   | 3    |
 | GET    | `/api/releases/:id/market` (+ `mine.orderIds` if logged in)                                           | anyone | 4    |
 | POST   | `/api/orders/:id/buy` (Buy this copy: price and grade come from the ad)                               | user   | 5    |
@@ -136,7 +137,7 @@ basic marketplace). Financial ideas from StockX and real exchanges, built on the
 | 12  | Sauransh | Seller fees by level (rolling 90-day volume), Wilson-score reliability, exact payouts    | ✅ done |
 | 13  | Sauransh | Fair value per grade (robust weighted regression), suggested price and chance of selling | ✅ done |
 | 14  | Sauransh | Price history (daily candles, volatility, spread) and the depth chart                    | ✅ done |
-| 15  | Sauransh | Ads that expire, and automatic repricing rules for sellers                               | ☐       |
+| 15  | Sauransh | Ads that expire, and automatic repricing rules for sellers                               | ✅ done |
 | 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ☐       |
 | 17  | Sauransh | Market surveillance: wash trading and outlier sales, kept out of prices                  | ☐       |
 | 18  | Sauransh | The reVINYL 30 index (volume-weighted, divisor-adjusted) and portfolio profit and loss   | ☐       |
