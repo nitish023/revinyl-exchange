@@ -181,6 +181,71 @@ async function insertOrder(client, order) {
   return rows[0].id;
 }
 
+/**
+ * A sale that already happened, written straight in the way a real one ends up: the copy
+ * belongs to the buyer, the two orders that met are filled, the trade is completed (with
+ * the seller's fee at their level then), and the money moved through the ledger, all dated
+ * `at`. Used by the demo seed and by the history simulator (`npm run db:simulate`).
+ * @param {import('pg').PoolClient} client
+ * @param {{ releaseId: number, buyerId: number, sellerId: number, grade: number,
+ *   sleeve?: number | null, priceCents: number, at: Date }} sale
+ * @returns {Promise<object>} the `trades` row
+ */
+export async function insertFinishedSale(client, sale) {
+  const { releaseId, buyerId, sellerId, grade, priceCents, at } = sale;
+  const listedAt = new Date(at.getTime() - 2 * DAY_MS);
+  const copyId = await insertCopy(client, {
+    ownerId: buyerId,
+    releaseId,
+    grade,
+    // A null sleeve grade means a generic sleeve; leaving it out means "same as the record".
+    sleeve: sale.sleeve === undefined ? grade : sale.sleeve,
+    status: 'in_crate',
+    at: listedAt,
+  });
+  const askId = await insertOrder(client, {
+    userId: sellerId,
+    releaseId,
+    side: 'ask',
+    price: priceCents,
+    copyId,
+    status: 'filled',
+    at: listedAt,
+  });
+  const bidId = await insertOrder(client, {
+    userId: buyerId,
+    releaseId,
+    side: 'bid',
+    price: priceCents,
+    minGrade: grade,
+    status: 'filled',
+    at,
+  });
+  const { rows: trades } = await client.query(
+    `INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
+                         buyer_id, seller_id, status, created_at, updated_at, shipped_at, settled_at,
+                         seller_fee_cents)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $9, $9, $9, $10) RETURNING *`,
+    [
+      releaseId,
+      copyId,
+      grade,
+      priceCents,
+      bidId,
+      askId,
+      buyerId,
+      sellerId,
+      at,
+      // The seller's fee at their level then, as a real sale's (Part 12).
+      await sellerFeeFor(client, sellerId, priceCents),
+    ],
+  );
+  // The money moves through the ledger, as a real sale's would: paid in, then paid out.
+  await postJournal(client, { ...tradeJournals.payment(trades[0]), at });
+  await postJournal(client, { ...tradeJournals.payout(trades[0]), at });
+  return trades[0];
+}
+
 async function seedRelease(client, releaseId, traders, now) {
   const { rows } = await client.query(
     'SELECT 1 FROM copies WHERE release_id = $1 AND owner_id = ANY($2) LIMIT 1',
@@ -192,57 +257,15 @@ async function seedRelease(client, releaseId, traders, now) {
 
   // Finished sales: the copy now belongs to the buyer, and the money has moved.
   for (const sale of plan.sales) {
-    const buyerId = traders[sale.buyer];
-    const sellerId = traders[sale.seller];
-    const listedAt = new Date(sale.at.getTime() - 2 * DAY_MS);
-    const copyId = await insertCopy(client, {
-      ownerId: buyerId,
+    await insertFinishedSale(client, {
       releaseId,
+      buyerId: traders[sale.buyer],
+      sellerId: traders[sale.seller],
       grade: sale.grade,
       sleeve: sale.sleeve,
-      status: 'in_crate',
-      at: listedAt,
-    });
-    const askId = await insertOrder(client, {
-      userId: sellerId,
-      releaseId,
-      side: 'ask',
-      price: sale.price,
-      copyId,
-      status: 'filled',
-      at: listedAt,
-    });
-    const bidId = await insertOrder(client, {
-      userId: buyerId,
-      releaseId,
-      side: 'bid',
-      price: sale.price,
-      minGrade: sale.grade,
-      status: 'filled',
+      priceCents: sale.price,
       at: sale.at,
     });
-    const { rows: trades } = await client.query(
-      `INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
-                           buyer_id, seller_id, status, created_at, updated_at, shipped_at, settled_at,
-                           seller_fee_cents)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $9, $9, $9, $10) RETURNING *`,
-      [
-        releaseId,
-        copyId,
-        sale.grade,
-        sale.price,
-        bidId,
-        askId,
-        buyerId,
-        sellerId,
-        sale.at,
-        // The seller's fee at their level then, as a real sale's (Part 12).
-        await sellerFeeFor(client, sellerId, sale.price),
-      ],
-    );
-    // The money moves through the ledger, as a real sale's would: paid in, then paid out.
-    await postJournal(client, { ...tradeJournals.payment(trades[0]), at: sale.at });
-    await postJournal(client, { ...tradeJournals.payout(trades[0]), at: sale.at });
   }
 
   // Copies for sale: listed, with one open ask each.

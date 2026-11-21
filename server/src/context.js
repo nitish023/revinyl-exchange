@@ -4,6 +4,7 @@
  */
 import { PricingService } from './analytics/pricingService.js';
 import { AuctionService } from './auctions/auctionService.js';
+import { BotService } from './bots/botService.js';
 import { CatalogService } from './catalog/catalogService.js';
 import { DiscogsClient } from './catalog/discogsClient.js';
 import { RateWindow } from './catalog/rateWindow.js';
@@ -27,6 +28,7 @@ import { TradeService } from './trades/tradeService.js';
  * @property {CollectionImport} collection previews and imports Discogs collections
  * @property {PricingService} pricing fair value per grade and the chance of selling (Part 13)
  * @property {AuctionService} auctions sealed-bid second-price auctions (Part 16)
+ * @property {BotService} bots the market-making bots (Part 19)
  */
 
 /** @param {import('./config.js').Config} config @returns {AppContext} */
@@ -53,15 +55,19 @@ export function createContext(config) {
     authenticate: sessionFromCookie(pool),
     trustProxy: config.isProduction,
   });
+  const orders = new OrderService({ pool, catalog, live });
+  const trades = new TradeService({ pool, live });
+  const pricing = new PricingService({ pool });
   return {
     config,
     pool,
     catalog,
     live,
-    orders: new OrderService({ pool, catalog, live }),
-    trades: new TradeService({ pool, live }),
+    orders,
+    trades,
     collection: new CollectionImport({ pool, source: discogs }),
-    pricing: new PricingService({ pool }),
+    pricing,
     auctions: new AuctionService({ pool, live }),
+    bots: new BotService({ pool, orders, trades, pricing }),
   };
 }

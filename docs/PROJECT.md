@@ -144,4 +144,4 @@ basic marketplace). Financial ideas from StockX and real exchanges, built on the
 | 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ✅ done |
 | 17  | Sauransh | Market surveillance: wash trading and outlier sales, kept out of prices                  | ✅ done |
 | 18  | Sauransh | The reVINYL 30 index (volume-weighted, divisor-adjusted) and portfolio profit and loss   | ✅ done |
-| 19  | Sauransh | Market-making bots (inventory-aware quotes around fair value) and a market simulation    | ☐       |
+| 19  | Sauransh | Market-making bots (inventory-aware quotes around fair value) and a market simulation    | ✅ done |

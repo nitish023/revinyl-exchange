@@ -7,10 +7,8 @@
  * VG+ equivalent, price × e^(-b·(grade − VG+)), with b the pressing's fitted grade premium
  * (fairValue.js). Then, as for a stock:
  *   - daily candles (UTC days): open, high, low and close of the day's sales, and how many;
- *   - volatility: the standard deviation of the log change between one trading day's close
- *     and the next, each scaled by √(days between) so gaps don't count as calm, and stated
- *     for a month (× √30);
- *   - the change over 30 days, and the 52-week high and low.
+ *   - volatility and the 30-day change, measured on weekly averages (see priceStats);
+ *   - the 52-week high and low.
  * Depth is the order book as two staircases: how many copies are wanted at a price or more,
  * and how many are for sale at a price or less.
  */
@@ -64,36 +62,68 @@ export function dailyCandles(sales, gradeStep) {
   return candles;
 }
 
+const WEEK_MS = 7 * DAY_MS;
+
+/** The geometric mean of the prices of the points in (from, to], or null if none. */
+function levelBetween(points, from, to) {
+  const inside = points.filter((point) => point.at > from && point.at <= to);
+  if (inside.length === 0) return null;
+  return Math.exp(inside.reduce((sum, point) => sum + Math.log(point.price), 0) / inside.length);
+}
+
 /**
- * Volatility, the 30-day change and the 52-week range, from the candles.
- * @param {Candle[]} candles
+ * Volatility, the 30-day change and the 52-week range, in VG+ terms.
+ *
+ * Every copy is different, so two sales on the same day can be 30% apart for reasons that
+ * have nothing to do with the market (one plays a little cleaner). Measured sale to sale,
+ * that scatter would read as huge volatility. So, like the price of any thinly traded
+ * asset, the market's level is taken as a weekly average (the geometric mean of a week's
+ * sales), and volatility and change are measured on that:
+ *   - volatility: the standard deviation of the log change between one week's level and
+ *     the next week with sales (divided by √weeks between, so a gap doesn't read as calm),
+ *     stated for a month (× √(30/7));
+ *   - the 30-day change: the last 7 days' level against the 7 days ending 30 days ago.
+ * @param {{ grade: number, priceCents: number, at: number }[]} sales
+ * @param {number} gradeStep
  * @param {number} now
  * @returns {{ monthlyVolatility: number | null, change30: number | null,
  *   high52: number | null, low52: number | null, lastClose: number | null }}
  *   volatility and change as fractions (0.12 = 12%); null when there isn't enough history
  */
-export function priceStats(candles, now) {
-  const dayMs = (candle) => Date.parse(`${candle.day}T00:00:00Z`);
-  let monthlyVolatility = null;
-  if (candles.length >= 3) {
-    const returns = [];
-    for (let i = 1; i < candles.length; i += 1) {
-      const gapDays = Math.max(1, (dayMs(candles[i]) - dayMs(candles[i - 1])) / DAY_MS);
-      returns.push(Math.log(candles[i].close / candles[i - 1].close) / Math.sqrt(gapDays));
-    }
-    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-    const variance = returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (returns.length - 1);
-    monthlyVolatility = Math.sqrt(variance) * Math.sqrt(30);
+export function priceStats(sales, gradeStep, now) {
+  const points = sales
+    .map((sale) => ({ at: sale.at, price: vgPlusEquivalent(sale, gradeStep) }))
+    .sort((a, b) => a.at - b.at);
+  const year = points.filter((point) => point.at > now - 365 * DAY_MS);
+
+  const weeks = [];
+  for (let back = 51; back >= 0; back -= 1) {
+    const to = now - back * WEEK_MS;
+    const level = levelBetween(points, to - WEEK_MS, to);
+    if (level !== null) weeks.push({ back, level });
   }
-  const lastClose = candles.at(-1)?.close ?? null;
-  const monthAgo = candles.filter((candle) => dayMs(candle) <= now - 30 * DAY_MS).at(-1);
-  const year = candles.filter((candle) => dayMs(candle) > now - 365 * DAY_MS);
+  let monthlyVolatility = null;
+  if (weeks.length >= 3) {
+    const returns = weeks
+      .slice(1)
+      .map(
+        (week, i) => Math.log(week.level / weeks[i].level) / Math.sqrt(weeks[i].back - week.back),
+      );
+    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const variance =
+      returns.length > 1
+        ? returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (returns.length - 1)
+        : 0;
+    monthlyVolatility = Math.sqrt(variance) * Math.sqrt(30 / 7);
+  }
+  const recent = levelBetween(points, now - WEEK_MS, now);
+  const monthAgo = levelBetween(points, now - 30 * DAY_MS - WEEK_MS, now - 30 * DAY_MS);
   return {
     monthlyVolatility,
-    change30: monthAgo && lastClose !== null ? lastClose / monthAgo.close - 1 : null,
-    high52: year.length ? Math.max(...year.map((candle) => candle.high)) : null,
-    low52: year.length ? Math.min(...year.map((candle) => candle.low)) : null,
-    lastClose,
+    change30: recent !== null && monthAgo !== null ? recent / monthAgo - 1 : null,
+    high52: year.length ? Math.max(...year.map((point) => point.price)) : null,
+    low52: year.length ? Math.min(...year.map((point) => point.price)) : null,
+    lastClose: points.at(-1)?.price ?? null,
   };
 }
 

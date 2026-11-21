@@ -206,7 +206,7 @@ export class PricingService {
     const fair = fitFairValue(sales, { now, priorStep: marketStep });
     const gradeStep = fair ? fair.gradeStep : marketStep;
     const candles = dailyCandles(sales, gradeStep);
-    const stats = priceStats(candles, now);
+    const stats = priceStats(sales, gradeStep, now);
     const orders = (side) =>
       book.rows
         .filter((row) => row.side === side)

@@ -79,6 +79,13 @@ describe('traders', () => {
     );
   });
 
+  it('labels the market maker’s ads, on both sides (Part 19)', () => {
+    expect(sellerLine({ name: 'desk_marlowe', trades: 12, marketMaker: true })).toBe(
+      'desk_marlowe, reVINYL’s market maker.',
+    );
+    expect(buyerLine({ trades: 3, marketMaker: true })).toBe('reVINYL’s market maker.');
+  });
+
   it('never names a buyer', () => {
     expect(buyerLine({ trades: 9 })).toBe('Buyer, 9 trades.');
     expect(buyerLine({ trades: 1 })).toBe('Buyer, 1 trade.');

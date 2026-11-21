@@ -35,10 +35,14 @@ void sweepExpired();
 const sweeper = setInterval(sweepExpired, 60_000);
 sweeper.unref();
 
+// Part 19: the market-making bots, every 30 seconds (BOTS=off to turn them off).
+if (config.BOTS === 'on') ctx.bots.start();
+
 // Render sends SIGTERM on deploys: finish open requests, then close the pool.
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, () => {
     clearInterval(sweeper);
+    ctx.bots.stop();
     ctx.live.close();
     server.close(() => ctx.pool.end().finally(() => process.exit(0)));
     setTimeout(() => process.exit(1), 10_000).unref();

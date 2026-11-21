@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { OrderBook } from '../market/orderBook.js';
+import { normal, seededRandom } from './stats.js';
 import {
   dailyCandles,
   dayOf,
@@ -50,37 +51,59 @@ describe('dailyCandles', () => {
 });
 
 describe('priceStats', () => {
-  it('measures volatility from close to close, scaling gaps by the square root of their days', () => {
-    // Up 10%, down 10%, up 10% on consecutive days.
-    const steady = dailyCandles([sale(3, 4000), sale(2, 4400), sale(1, 4000), sale(0, 4400)], 0);
+  it('measures volatility on weekly levels, scaling gaps by the square root of their weeks', () => {
+    // One sale a week: up 10%, down 10%, up 10%.
+    const weekly = [sale(21, 4000), sale(14, 4400), sale(7, 4000), sale(0, 4400)];
     const r = Math.log(1.1);
     const sd = Math.sqrt((3 * r * r - (r * r) / 3) / 2); // sample sd of [r, -r, r]
-    expect(priceStats(steady, NOW).monthlyVolatility).toBeCloseTo(sd * Math.sqrt(30), 10);
-    // The same moves four days apart: each is spread over 4 days, so half as volatile (√4 = 2).
-    const slow = dailyCandles([sale(12, 4000), sale(8, 4400), sale(4, 4000), sale(0, 4400)], 0);
-    expect(priceStats(slow, NOW).monthlyVolatility).toBeCloseTo((sd / 2) * Math.sqrt(30), 10);
-  });
-
-  it('says nothing about volatility from fewer than three days of sales', () => {
-    expect(
-      priceStats(dailyCandles([sale(1, 4000), sale(0, 4400)], 0), NOW).monthlyVolatility,
-    ).toBeNull();
-  });
-
-  it('the 30-day change and the 52-week range', () => {
-    const candles = dailyCandles(
-      [sale(400, 9000), sale(40, 2000), sale(31, 3000), sale(10, 5000), sale(0, 3300)],
-      0,
+    expect(priceStats(weekly, 0, NOW).monthlyVolatility).toBeCloseTo(sd * Math.sqrt(30 / 7), 10);
+    // The same moves four weeks apart: each spread over 4 weeks, so half as volatile (√4 = 2).
+    const slow = [sale(84, 4000), sale(56, 4400), sale(28, 4000), sale(0, 4400)];
+    expect(priceStats(slow, 0, NOW).monthlyVolatility).toBeCloseTo(
+      (sd / 2) * Math.sqrt(30 / 7),
+      10,
     );
-    const stats = priceStats(candles, NOW);
-    expect(stats.change30).toBeCloseTo(0.1, 10); // $30 a month ago, $33 now
+  });
+
+  it('isn’t fooled by the scatter between individual copies', () => {
+    // A level market: six sales a week for 20 weeks, each copy ±15% from the next.
+    const random = seededRandom(3);
+    const sales = [];
+    for (let day = 0; day < 140; day += 1) {
+      if (random() < 6 / 7)
+        sales.push(sale(day, Math.round(4000 * Math.exp(0.15 * normal(random)))));
+    }
+    // Sale to sale this reads as over 100% a month (0.15 × √2 a day, × √30). A week's average
+    // of ~6 copies keeps a sixth of the scatter's variance: about 0.18 a month, and no trend.
+    expect(priceStats(sales, 0, NOW).monthlyVolatility).toBeLessThan(0.3);
+  });
+
+  it('says nothing about volatility from fewer than three weeks with sales', () => {
+    expect(priceStats([sale(8, 4000), sale(0, 4400)], 0, NOW).monthlyVolatility).toBeNull();
+  });
+
+  it('the 30-day change compares weekly levels; the 52-week range is in VG+ terms', () => {
+    const sales = [
+      sale(400, 9000),
+      sale(32, 2000),
+      sale(31, 4500), // the week ending 30 days ago averages $30 (geometric mean)
+      sale(10, 5000),
+      sale(1, 3000),
+      sale(0, 3630), // the last week averages $33
+    ];
+    const stats = priceStats(sales, 0, NOW);
+    expect(stats.change30).toBeCloseTo(0.1, 2);
     expect(stats.high52).toBe(5000); // the $90 sale is over a year old
     expect(stats.low52).toBe(2000);
-    expect(stats.lastClose).toBe(3300);
+    expect(stats.lastClose).toBe(3630);
+    // A Near Mint sale counts at its VG+ value.
+    expect(
+      priceStats([{ grade: 7, priceCents: 5000, at: NOW }], Math.log(1.25), NOW).lastClose,
+    ).toBe(4000);
   });
 
-  it('has no 30-day change without a sale at least 30 days ago', () => {
-    expect(priceStats(dailyCandles([sale(5, 4000), sale(0, 4400)], 0), NOW).change30).toBeNull();
+  it('has no 30-day change without sales in both weeks', () => {
+    expect(priceStats([sale(5, 4000), sale(0, 4400)], 0, NOW).change30).toBeNull();
   });
 });
 

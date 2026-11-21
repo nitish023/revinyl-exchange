@@ -28,7 +28,7 @@ export async function loadMarket(db, releaseId, now = Date.now()) {
       `SELECT o.id AS "orderId", o.price_cents AS "priceCents", o.created_at AS "createdAt",
               c.id AS "copyId", c.grade, c.sleeve_grade AS "sleeveGrade", c.flags, c.headline, c.notes,
               (SELECT count(*) FROM copy_photos p WHERE p.copy_id = c.id) AS photos,
-              u.display_name AS "sellerName", ${TRADE_COUNT} AS "sellerTrades",
+              u.display_name AS "sellerName", u.is_bot AS "sellerIsBot", ${TRADE_COUNT} AS "sellerTrades",
               ${SELLER_RECORD}
          FROM orders o
          JOIN copies c ON c.id = o.copy_id
@@ -38,7 +38,7 @@ export async function loadMarket(db, releaseId, now = Date.now()) {
     ),
     db.query(
       `SELECT o.id AS "orderId", o.price_cents AS "priceCents", o.min_grade AS "minGrade",
-              o.note, o.created_at AS "createdAt", ${TRADE_COUNT} AS "buyerTrades"
+              o.note, o.created_at AS "createdAt", u.is_bot AS "buyerIsBot", ${TRADE_COUNT} AS "buyerTrades"
          FROM orders o
          JOIN users u ON u.id = o.user_id
         WHERE o.release_id = $1 AND o.side = 'bid' AND o.status = 'open'`,
