@@ -42,6 +42,55 @@ function appraisalTable(fairValue) {
   );
 }
 
+/** The reasons surveillance gives, in words. */
+export const REASON_WORDS = {
+  round_trip: 'the copy went back to someone who sold it',
+  pair_churn: 'the same two traders kept trading with each other',
+};
+
+/**
+ * Part 17: "Market integrity", under the appraisal: which sales were left out of these
+ * numbers and why. Nothing is shown when nothing was set aside.
+ */
+export function integrityNote(integrity) {
+  const { washTrades, outliers, checked } = integrity;
+  if (washTrades.length === 0 && outliers.length === 0) {
+    return checked > 0
+      ? h(
+          'p',
+          { class: 'statement-books integrity-note' },
+          `Market integrity: all ${checked} recent ${checked === 1 ? 'sale looks' : 'sales look'} like real trades.`,
+        )
+      : null;
+  }
+  const line = (sale, why) =>
+    h(
+      'li',
+      {},
+      `$${sale.price} (${sale.code}), ${new Date(sale.at).toISOString().slice(0, 10)}: ${why}`,
+    );
+  return h(
+    'div',
+    { class: 'integrity-note' },
+    h(
+      'p',
+      { class: 'statement-books' },
+      `Market integrity: ${washTrades.length + outliers.length} of ${checked} recent sales are left out of these numbers.`,
+    ),
+    h(
+      'ul',
+      { class: 'integrity-list' },
+      washTrades.map((sale) =>
+        line(
+          sale,
+          `possible wash trading (${sale.reasons.map((r) => REASON_WORDS[r]).join('; ')})`,
+        ),
+      ),
+      outliers.map((sale) => line(sale, 'too far from every other sale to trust')),
+    ),
+  );
+}
+
 /**
  * @param {{ releaseId: number, signal: AbortSignal }} options
  * @returns {{ element: HTMLElement, refresh: () => void }} refresh after a sale
@@ -62,7 +111,11 @@ export function appraisalSection({ releaseId, signal }) {
 
   async function refresh() {
     try {
-      const { pricing } = await api.pricing(releaseId, signal);
+      const [{ pricing }, integrity] = await Promise.all([
+        api.pricing(releaseId, signal),
+        // Part 17: what surveillance set aside. A footnote: the appraisal stands without it.
+        (async () => (await api.integrity(releaseId, signal)).integrity)().catch(() => null),
+      ]);
       if (signal.aborted) return;
       replaceChildren(
         body,
@@ -76,6 +129,7 @@ export function appraisalSection({ releaseId, signal }) {
               { class: 'room-none' },
               'No sales yet. The appraisal starts with the first one.',
             ),
+        integrity ? integrityNote(integrity) : null,
       );
     } catch (error) {
       if (isAbortError(error) || signal.aborted) return;

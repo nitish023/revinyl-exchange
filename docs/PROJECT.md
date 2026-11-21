@@ -109,6 +109,7 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/seller` (your level, fee, trust score, last 90 days, and what the next level needs)                | user   | 12   |
 | GET    | `/api/releases/:id/pricing` (fair value per grade with 80% ranges, and the time-to-sale model)           | anyone | 13   |
 | GET    | `/api/releases/:id/history` (daily candles in VG+ terms, volatility, 30-day change, book per grade)      | anyone | 14   |
+| GET    | `/api/releases/:id/integrity` (sales set aside: possible wash trades with reasons, and outliers)         | anyone | 17   |
 | GET    | `/api/releases/:id/auctions`; `POST /api/auctions`, `/api/auctions/:id/bids`; `DELETE /api/auctions/:id` | mixed  | 16   |
 | WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                                | anyone | 4    |
 
@@ -140,6 +141,6 @@ basic marketplace). Financial ideas from StockX and real exchanges, built on the
 | 14  | Sauransh | Price history (daily candles, volatility, spread) and the depth chart                    | ✅ done |
 | 15  | Sauransh | Ads that expire, and automatic repricing rules for sellers                               | ✅ done |
 | 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ✅ done |
-| 17  | Sauransh | Market surveillance: wash trading and outlier sales, kept out of prices                  | ☐       |
+| 17  | Sauransh | Market surveillance: wash trading and outlier sales, kept out of prices                  | ✅ done |
 | 18  | Sauransh | The reVINYL 30 index (volume-weighted, divisor-adjusted) and portfolio profit and loss   | ☐       |
 | 19  | Sauransh | Market-making bots (inventory-aware quotes around fair value) and a market simulation    | ☐       |

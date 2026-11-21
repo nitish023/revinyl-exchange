@@ -49,8 +49,10 @@ describe('seller fees', () => {
   });
 
   it('three completed sales worth $100 make level 2: the next sale costs 11.5%', async () => {
-    const [seller, buyer] = [await signUp('sella'), await signUp('buyer')];
-    for (let i = 0; i < 3; i += 1) await sell(seller, buyer, '40.00');
+    const seller = await signUp('sella');
+    const buyers = [await signUp('buyer'), await signUp('buyer2'), await signUp('buyer3')];
+    const buyer = buyers[0];
+    for (const each of buyers) await sell(seller, each, '40.00');
     expect(await standingOf(seller)).toMatchObject({
       level: 2,
       fee: '11.5%',
@@ -63,13 +65,41 @@ describe('seller fees', () => {
   });
 
   it('fixes the fee when the sale is made, even if the seller levels up before payout', async () => {
-    const [seller, buyer] = [await signUp('sella'), await signUp('buyer')];
+    const seller = await signUp('sella');
+    const buyers = [await signUp('buyer'), await signUp('buyer2'), await signUp('buyer3')];
+    const buyer = buyers[0];
     const early = await sell(seller, buyer, '40.00', 'made'); // made at level 1
-    for (let i = 0; i < 3; i += 1) await sell(seller, buyer, '40.00');
+    for (const each of buyers) await sell(seller, each, '40.00');
     expect((await standingOf(seller)).level).toBe(2);
     await step(seller, early.id, 'ship').expect(200);
     await step(buyer, early.id, 'received').expect(200);
     expect(await feeOf(early.id)).toBe(480); // still the level 1 fee
+  });
+
+  it('selling to the same buyer over and over can’t buy a level (Part 17)', async () => {
+    const [seller, friend] = [await signUp('sella'), await signUp('buyer')];
+    for (let i = 0; i < 5; i += 1) await sell(seller, friend, '40.00');
+    // Only two sales to one buyer count, so $80 in two sales: still level 1.
+    expect(await standingOf(seller)).toMatchObject({ level: 1, sales90: 2, completed: 5 });
+  });
+
+  it('a copy sold and bought back doesn’t count either', async () => {
+    const [seller, friend, other] = [
+      await signUp('sella'),
+      await signUp('buyer'),
+      await signUp('other'),
+    ];
+    const { copy, order } = await listCopy(seller, '60.00');
+    const { trade } = (await buy(friend, order.id).expect(201)).body;
+    await step(seller, trade.id, 'ship').expect(200);
+    await step(friend, trade.id, 'received').expect(200);
+    const back = (await friend.post('/api/orders', { side: 'ask', copyId: copy.id, price: '60' }))
+      .body.order;
+    const { trade: returned } = (await buy(seller, back.id).expect(201)).body;
+    await step(friend, returned.id, 'ship').expect(200);
+    await step(seller, returned.id, 'received').expect(200);
+    await sell(seller, other, '40.00');
+    expect(await standingOf(seller)).toMatchObject({ sales90: 1, volume90: '40.00', completed: 2 });
   });
 
   it('only counts the last 90 days', async () => {

@@ -11,6 +11,9 @@ import {
   standingOf,
 } from '../../../shared/index.js';
 
+/** Part 17: sales to one buyer that count towards a level, per 90 days. */
+export const MAX_COUNTED_PER_BUYER = 2;
+
 /**
  * Completed sales and their value in the last 90 days, and all-time completed and refunded
  * sales, as the seller. A sale counts towards a level when it completed (the buyer accepted
@@ -21,14 +24,26 @@ import {
  * @returns {Promise<import('../../../shared/fees.js').SellerRecord>}
  */
 export async function loadSellerRecord(db, userId, now = new Date()) {
+  // Part 17: levels can't be bought by trading with a friend. A sale whose copy came back to
+  // this seller from the buyer within 30 days (a round trip) doesn't count, and at most
+  // MAX_COUNTED_PER_BUYER sales to any one buyer count in the window.
   const { rows } = await db.query(
-    `SELECT count(*) FILTER (WHERE status = 'completed' AND settled_at > $2) AS sales90,
-            coalesce(sum(price_cents) FILTER (WHERE status = 'completed' AND settled_at > $2), 0)::bigint
-              AS volume90,
-            count(*) FILTER (WHERE status = 'completed') AS completed,
-            count(*) FILTER (WHERE status = 'refunded') AS refunded
-       FROM trades WHERE seller_id = $1`,
-    [userId, new Date(now.getTime() - LEVEL_WINDOW_DAYS * 86_400_000)],
+    `WITH counted AS (
+       SELECT t.price_cents,
+              row_number() OVER (PARTITION BY t.buyer_id ORDER BY t.settled_at, t.id) AS nth
+         FROM trades t
+        WHERE t.seller_id = $1 AND t.status = 'completed' AND t.settled_at > $2
+          AND NOT EXISTS (
+                SELECT 1 FROM trades back
+                 WHERE back.copy_id = t.copy_id AND back.id <> t.id AND back.status <> 'refunded'
+                   AND back.seller_id = t.buyer_id AND back.buyer_id = t.seller_id
+                   AND abs(extract(epoch FROM back.created_at - t.created_at)) < 30 * 86400)
+     )
+     SELECT (SELECT count(*) FROM counted WHERE nth <= $3) AS sales90,
+            (SELECT coalesce(sum(price_cents), 0)::bigint FROM counted WHERE nth <= $3) AS volume90,
+            (SELECT count(*) FROM trades WHERE seller_id = $1 AND status = 'completed') AS completed,
+            (SELECT count(*) FROM trades WHERE seller_id = $1 AND status = 'refunded') AS refunded`,
+    [userId, new Date(now.getTime() - LEVEL_WINDOW_DAYS * 86_400_000), MAX_COUNTED_PER_BUYER],
   );
   const row = rows[0];
   return {
