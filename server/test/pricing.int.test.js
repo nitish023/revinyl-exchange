@@ -140,6 +140,8 @@ describe('GET /api/releases/:id/history (Part 14)', () => {
       stats: {
         monthlyVolatility: null,
         change30: null,
+        high30: null,
+        low30: null,
         high52: null,
         low52: null,
         lastClose: null,

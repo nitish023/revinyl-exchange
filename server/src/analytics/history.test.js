@@ -95,6 +95,8 @@ describe('priceStats', () => {
     expect(stats.change30).toBeCloseTo(0.1, 2);
     expect(stats.high52).toBe(5000); // the $90 sale is over a year old
     expect(stats.low52).toBe(2000);
+    // The last 30 days: the $50 and the last two (the $20 and $45 sales are older).
+    expect([stats.low30, stats.high30]).toEqual([3000, 5000]);
     expect(stats.lastClose).toBe(3630);
     // A Near Mint sale counts at its VG+ value.
     expect(

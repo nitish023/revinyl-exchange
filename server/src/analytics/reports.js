@@ -4,7 +4,7 @@
  */
 import { formatCents, gradeByRank } from '../../../shared/index.js';
 import { buildIndex, INDEX_SIZE, REBALANCE_DAYS } from './marketIndex.js';
-import { buildPortfolio } from './portfolio.js';
+import { buildPortfolio, portfolioSeries } from './portfolio.js';
 
 const DAY_MS = 86_400_000;
 const money = (cents) => (cents === null || cents === undefined ? null : formatCents(cents));
@@ -165,5 +165,61 @@ export async function loadPortfolio(ctx, userId) {
       returnShare: totals.returnShare,
       unpriced: totals.unpriced,
     },
+    history: await netWorthHistory(ctx, userId),
   };
+}
+
+/**
+ * Part 18: net worth day by day for the last 90 days: cash from the ledger, plus the copies
+ * owned each day at their pressing's price then (portfolioSeries).
+ */
+async function netWorthHistory(ctx, userId, now = Date.now()) {
+  const [cash, copies] = await Promise.all([
+    ctx.pool.query(
+      `SELECT j.created_at, e.amount_cents FROM ledger_entries e
+         JOIN ledger_journals j ON j.id = e.journal_id
+        WHERE e.account = 'cash' AND e.user_id = $1`,
+      [userId],
+    ),
+    // Every copy I have or have had: mine now, or in a trade I was part of.
+    ctx.pool.query(
+      `SELECT id, owner_id, release_id, grade, created_at, removed_at FROM copies
+        WHERE owner_id = $1
+           OR id IN (SELECT copy_id FROM trades
+                      WHERE (buyer_id = $1 OR seller_id = $1) AND status <> 'refunded')`,
+      [userId],
+    ),
+  ]);
+  const copyIds = copies.rows.map((row) => row.id);
+  const { rows: trades } = await ctx.pool.query(
+    `SELECT copy_id, buyer_id, seller_id, created_at FROM trades
+      WHERE copy_id = ANY($1::bigint[]) AND status <> 'refunded'`,
+    [copyIds],
+  );
+  const markets = await ctx.pricing.markets([...new Set(copies.rows.map((row) => row.release_id))]);
+  return portfolioSeries({
+    userId,
+    now,
+    cash: cash.rows.map((row) => ({ at: row.created_at.getTime(), amountCents: row.amount_cents })),
+    copies: copies.rows.map((row) => ({
+      id: row.id,
+      ownerId: row.owner_id,
+      releaseId: row.release_id,
+      grade: row.grade,
+      createdAt: row.created_at.getTime(),
+      removedAt: row.removed_at ? row.removed_at.getTime() : null,
+    })),
+    trades: trades.map((row) => ({
+      copyId: row.copy_id,
+      buyerId: row.buyer_id,
+      sellerId: row.seller_id,
+      at: row.created_at.getTime(),
+    })),
+    markets,
+  }).map((point) => ({
+    day: point.day,
+    cash: money(point.cashCents),
+    holdings: money(point.holdingsCents),
+    netWorth: money(point.netWorthCents),
+  }));
 }

@@ -19,9 +19,13 @@ themselves).
 ## As built (`server/src/analytics/history.js`)
 
 - `dailyCandles(sales, b)`: one candle per UTC day with sales (open, high, low, close in VG+ terms, and how many).
-- `priceStats(candles, now)`: **volatility** is the standard deviation of the log change from one trading day's close
-  to the next, each divided by √(days between) so a quiet gap doesn't look calm, stated for a month (× √30); the
-  **30-day change** against the last close at least 30 days ago; the **52-week high and low**.
+- `priceStats(sales, b, now)`: every copy is different, so individual sales scatter ±15% for reasons that aren't the
+  market, and measured sale to sale that read as over 100% volatility a month. So, as for any thinly traded asset, the
+  market's level is a **weekly average** (the geometric mean of a week's sales): **volatility** is the standard
+  deviation of the log change from one week's level to the next week with sales (divided by √weeks between, so a quiet
+  gap doesn't look calm), stated for a month (× √(30/7)); the **30-day change** compares the last 7 days' level with the
+  7 days ending 30 days ago; plus the **30-day** and **52-week high and low**. (Revised in Part 19; a test shows a level
+  market of scattered copies reads as a small volatility.)
 - `depth(bids, asks)` and `depthByGrade`: each side as a cumulative staircase from its best price outwards (copies
   wanted at a price or more; copies for sale at a price or less), and the spread with its share of the cheapest copy.
 - `GET /api/releases/:id/history` (`PricingService.history`): candles, stats, and one book per grade.

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api.js';
 import { lineLayout } from '../lib/charts.js';
 import { levelText, marketIndexSection } from './marketIndex.js';
-import { portfolioSection, portfolioSummary } from './portfolio.js';
+import { netWorthChart, portfolioSection, portfolioSummary } from './portfolio.js';
 
 vi.mock('../lib/api.js', async (importOriginal) => {
   const original = await importOriginal();
@@ -73,6 +73,24 @@ describe('the reVINYL 30', () => {
     expect(last.x).toBeCloseTo(points[2][0], 1);
     expect(last.y).toBeCloseTo(points[2][1], 1);
     expect(levelText(1000)).toBe('1,000.00');
+  });
+});
+
+describe('net worth over time', () => {
+  it('draws from the first day you had anything, and needs two days', () => {
+    const history = [
+      { day: '2026-11-17', netWorth: '0.00' },
+      { day: '2026-11-18', netWorth: '2000.00' },
+      { day: '2026-11-19', netWorth: '1990.00' },
+      { day: '2026-11-20', netWorth: '2040.00' },
+    ];
+    const chart = netWorthChart(history);
+    expect(chart.getAttribute('aria-label')).toBe('Your net worth over 3 days, now $2040.00.');
+    expect(
+      chart.querySelectorAll('text')[chart.querySelectorAll('text').length - 2].textContent,
+    ).toBe('2026-11-18');
+    expect(netWorthChart(history.slice(0, 2))).toBeNull();
+    expect(netWorthChart()).toBeNull();
   });
 });
 

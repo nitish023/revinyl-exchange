@@ -13,33 +13,47 @@ to one-copy orders:
 - **Spread** `δ = fair × (s₀ + c·σ)`: wider when prices are less certain (σ, the scatter of recent sales).
 - **Quotes** `r ∓ δ/2`, in whole cents, at least $1, bid always under ask (a property test over all inputs).
 
+## The mean-reversion rule (`server/src/sim/meanReversion.js`)
+
+A second strategy, betting that prices which stray far from fair value come back. It measures the last sale's distance
+from fair value in standard deviations, `z = ln(last ÷ fair) ÷ σ`: at `z ≤ −1` it bids 2% over that sale (buying the dip,
+up to 3 copies); at `z ≥ 1` with stock it asks 2% under it (never below fair value); otherwise it offers what it holds at
+fair value, taking the profit once the price is back.
+
 ## The simulation (`server/src/sim/simulation.js`, `npm run simulate`)
 
 An agent-based market for one pressing, run on the real matching engine (`OrderBook`): the record's true value drifts
 like a stock price (geometric Brownian motion) and nobody sees it; collectors arrive at random (Poisson), half to buy and
 half to sell, each valuing the record around its true value and asking a little better for themselves; their orders
-wait ten days and expire. The maker (optional) learns value from the trades it sees and quotes every day. Same seed,
-same collectors, with and without it, averaged over 50 seeds:
+wait ten days and expire. The bots (each optional) learn value from the trades they see: the maker quotes every day; the
+mean-reversion trader keeps a slower average and acts on big moves. Same seeds, same collectors, averaged over 50 seeds:
 
-|                             | without | with a maker |
-| --------------------------- | ------: | -----------: |
-| Trades in 120 days          |   119.7 |        128.7 |
-| Quoted spread               |    8.3% |         6.8% |
-| Days an order waits to fill |    1.35 |         1.15 |
-| Trade price vs true value   |    5.3% |         4.6% |
+|                             | no bots | maker | reverter |  both |
+| --------------------------- | ------: | ----: | -------: | ----: |
+| Trades in 120 days          |   119.7 | 128.7 |    122.3 | 131.3 |
+| Quoted spread               |    8.3% |  6.8% |     8.0% |  6.5% |
+| Days an order waits to fill |    1.35 |  1.15 |     1.30 |  1.10 |
+| Trade price vs true value   |   5.30% | 4.63% |    5.24% | 4.64% |
 
-The maker made $25.41 on average (profitable in 48 of 50 runs) and never held more than 4 copies. The tests check the
-same directions over 8 seeds.
+- The **market maker** made $25.41 on average (profitable in 48 of 50 runs), never holding more than 4 copies.
+- The **mean-reversion trader** alone made $4.48 on average (profitable in 37 of 50), buying dips and selling them back.
+- **Together**, the reverter breaks even (−$0.40, profitable in 29 of 50): the maker already keeps prices near value, so
+  the dips it waits for are rarer. Liquidity provision and statistical arbitrage compete for the same mispricing.
+
+The tests check these directions over 8 to 20 seeds.
 
 ## Live bots (`server/src/bots/botService.js`)
 
-- Two bots (`desk_marlowe`, `desk_okafor`), ordinary users flagged `is_bot` (migration 012) with random, discarded
-  passwords. They place, cancel and step trades through the order and trade services, so every rule applies to them.
+- Three bots, ordinary users flagged `is_bot` (migration 012) with random, discarded passwords: two market makers
+  (`desk_marlowe`, `desk_okafor`) and a mean-reversion trader (`desk_sato`). They place, cancel and step trades through
+  the order and trade services, so every rule applies to them.
 - Every 30 seconds (`BOTS=off` turns them off): ship what they sold and accept what they bought once shipped; then, on
-  the 12 busiest pressings (shared out between the bots), for the grade that sells most, keep one WANTED ad and one FOR
-  SALE ad at the rule's quotes for the pressing's fair value and spread (Part 13) and the bot's stock. An ad is replaced
-  only when its quote moves more than 3%; ads run 7 days. A bot opens each pressing with two copies of stock.
-- Their ads say so: "desk_marlowe, reVINYL's market maker." on a FOR SALE ad, "reVINYL's market maker." on a WANTED ad.
+  the 12 busiest pressings, for the grade that sells most: a maker (pressings shared out between the two) keeps one
+  WANTED ad and one FOR SALE ad at the rule's quotes for the pressing's fair value and spread (Part 13) and its stock,
+  opening each pressing with two copies of stock; `desk_sato` applies its rule to the pressing's last sale. An ad is
+  replaced only when its price moves more than 3%; ads run 7 days. On the live site a maker's standing bid catches a
+  dip before the reverter can, just as in the simulation.
+- Their ads say so: "desk_marlowe, a reVINYL trading bot." on a FOR SALE ad, "A reVINYL trading bot." on a WANTED ad.
 
 ## Demo history (`npm run db:simulate`, `npm run db:reset`)
 

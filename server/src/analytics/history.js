@@ -87,6 +87,7 @@ function levelBetween(points, from, to) {
  * @param {number} gradeStep
  * @param {number} now
  * @returns {{ monthlyVolatility: number | null, change30: number | null,
+ *   high30: number | null, low30: number | null,
  *   high52: number | null, low52: number | null, lastClose: number | null }}
  *   volatility and change as fractions (0.12 = 12%); null when there isn't enough history
  */
@@ -118,11 +119,15 @@ export function priceStats(sales, gradeStep, now) {
   }
   const recent = levelBetween(points, now - WEEK_MS, now);
   const monthAgo = levelBetween(points, now - 30 * DAY_MS - WEEK_MS, now - 30 * DAY_MS);
+  const month = points.filter((point) => point.at > now - 30 * DAY_MS);
+  const range = (list, pick) => (list.length ? pick(...list.map((point) => point.price)) : null);
   return {
     monthlyVolatility,
     change30: recent !== null && monthAgo !== null ? recent / monthAgo - 1 : null,
-    high52: year.length ? Math.max(...year.map((point) => point.price)) : null,
-    low52: year.length ? Math.min(...year.map((point) => point.price)) : null,
+    high30: range(month, Math.max),
+    low30: range(month, Math.min),
+    high52: range(year, Math.max),
+    low52: range(year, Math.min),
     lastClose: points.at(-1)?.price ?? null,
   };
 }

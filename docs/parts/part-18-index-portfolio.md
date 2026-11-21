@@ -36,8 +36,12 @@ portfolio: what their records are worth, what they paid and what they've made.
 - Front page: **The reVINYL 30**: the level and its 30-day change, a line over 90 days, the ten biggest members with
   weights and VG+ prices, and how it's built in a paragraph.
 - Listening Room: **Your portfolio**: a summary sentence (net worth, gains on paper and from sales, return, records with
-  no fair value yet), your records with cost, fair value and gain, and your sales with what each paid you, what it cost
-  and the gain.
+  no fair value yet), **net worth over the last 90 days** as a line, your records with cost, fair value and gain, and
+  your sales with what each paid you, what it cost and the gain.
+- **Net worth over time** (`portfolioSeries`): for each day, cash from the ledger at the end of that day, plus every copy
+  owned that day (from each copy's trade history: the buyer owns it from the moment they pay, so a copy in the post
+  counts for them) at its pressing's level then: a VG+ copy's weekly average price, carried through quiet weeks, moved
+  to the copy's grade. A pressing that hasn't sold yet adds nothing.
 - Tests: `marketIndex.test.js`, `portfolio.test.js`, `reports.int.test.js` (the index from two pressings weighted 75/25;
   holdings at fair value with and without cost; a copy bought at $40 and sold at $60 realizes $12.80 after the 12% fee;
   a copy on its way; login required), client tests, and the browser.

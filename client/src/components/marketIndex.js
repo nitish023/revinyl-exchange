@@ -5,56 +5,20 @@
  */
 import { h, replaceChildren } from '../dom.js';
 import { api, isAbortError } from '../lib/api.js';
-import { LINE_FRAME, lineLayout, signedPercent } from '../lib/charts.js';
+import { signedPercent } from '../lib/charts.js';
 import { releasePath } from '../lib/records.js';
-
-const SVG = 'http://www.w3.org/2000/svg';
-const s = (tag, attrs = {}, ...children) => {
-  const element = document.createElementNS(SVG, tag);
-  for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, String(value));
-  for (const child of children.flat()) {
-    if (child) element.append(typeof child === 'string' ? document.createTextNode(child) : child);
-  }
-  return element;
-};
+import { lineChart } from './lineChart.js';
 
 /** "1,042.17" */
 export const levelText = (level) =>
   level.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function indexChart(index) {
-  const frame = LINE_FRAME;
-  const { path, ticks, last } = lineLayout(index.series, frame);
-  const edge = frame.width - frame.right;
-  return s(
-    'svg',
-    {
-      class: 'chart',
-      viewBox: `0 0 ${frame.width} ${frame.height}`,
-      role: 'img',
-      'aria-label': `The reVINYL 30 over ${index.series.length} days, now ${levelText(index.level)}.`,
-    },
-    ticks.map((tick) =>
-      s(
-        'g',
-        { class: 'chart-grid' },
-        s('line', { x1: frame.left, x2: edge, y1: tick.y, y2: tick.y }),
-        s(
-          'text',
-          { x: frame.width - 2, y: tick.y + 4, 'text-anchor': 'end' },
-          levelText(tick.value).replace(/\.00$/, ''),
-        ),
-      ),
-    ),
-    s('path', { class: 'index-line', d: path }),
-    s('circle', { class: 'index-dot', cx: last.x, cy: last.y, r: 4 }),
-    s('text', { class: 'chart-label', x: frame.left, y: frame.height - 8 }, index.series[0].day),
-    s(
-      'text',
-      { class: 'chart-label', x: edge, y: frame.height - 8, 'text-anchor': 'end' },
-      index.series.at(-1).day,
-    ),
-  );
+  return lineChart({
+    points: index.series.map((point) => ({ day: point.day, value: point.level })),
+    format: (value) => levelText(value).replace(/\.00$/, ''),
+    label: `The reVINYL 30 over ${index.series.length} days, now ${levelText(index.level)}.`,
+  });
 }
 
 function membersTable(members) {
