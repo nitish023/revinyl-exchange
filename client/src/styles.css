@@ -1758,6 +1758,84 @@ select.input {
   font-weight: 700;
 }
 
+/* Part 14: the price history and the book. One ink, like everything else in the paper. */
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 12px;
+  font-family: var(--font-label);
+  font-size: 11px;
+}
+.chart text {
+  fill: var(--ink);
+}
+.chart-grid line {
+  stroke: var(--rule);
+  stroke-dasharray: 2 3;
+}
+.chart-axis {
+  stroke: var(--ink);
+}
+.chart-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.candle line {
+  stroke: var(--ink);
+}
+.candle rect {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+.candle-up rect {
+  fill: var(--paper);
+}
+.candle-down rect {
+  fill: var(--ink);
+}
+.candle rect.chart-volume {
+  fill: var(--rule);
+  stroke: none;
+}
+.depth-bids {
+  fill: var(--rule);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.depth-asks {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.chart-hatch {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+.book-grades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.price-chip[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+@media (max-width: 600px) {
+  /* The charts shrink to the screen; keep their words readable. */
+  .chart {
+    font-size: 22px;
+  }
+}
+.history-subhead {
+  margin: 32px 0 0;
+  font-family: var(--font-gothic);
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 /* The ledger's statement (your cash, line by line) and reVINYL's books. */
 .room-statement {
   margin-top: var(--space-section);

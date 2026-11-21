@@ -80,6 +80,8 @@ export const api = {
   market: (id, signal) => request('GET', `/releases/${id}/market`, signal ? { signal } : {}),
   /** Fair value per grade and the time-to-sale model (Part 13). */
   pricing: (id, signal) => request('GET', `/releases/${id}/pricing`, signal ? { signal } : {}),
+  /** Daily candles in VG+ terms, their stats, and the book as depth (Part 14). */
+  history: (id, signal) => request('GET', `/releases/${id}/history`, signal ? { signal } : {}),
 
   wallet: (signal) => request('GET', '/wallet', signal ? { signal } : {}),
   crate: (releaseId, signal) =>
