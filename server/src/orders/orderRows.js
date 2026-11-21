@@ -63,16 +63,28 @@ export function toTradeView(row, viewerId) {
   };
 }
 
-/** Every open order for a pressing, with each ask's grade: what the book is built from. */
-export async function loadOpenOrders(db, releaseId) {
+/**
+ * Open orders, with each ask's grade, by pressing: what the books are built from. One
+ * pressing, or every pressing (restart recovery, Part 7). Oldest first.
+ * @param {import('pg').Pool} db
+ * @param {number | null} [releaseId] null for every pressing
+ * @returns {Promise<Map<number, import('../market/orderBook.js').Order[]>>}
+ */
+export async function loadOpenOrders(db, releaseId = null) {
   const { rows } = await db.query(
     `SELECT o.*, c.grade
        FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
-      WHERE o.release_id = $1 AND o.status = 'open'
+      WHERE o.status = 'open' AND ($1::bigint IS NULL OR o.release_id = $1)
       ORDER BY o.id`,
     [releaseId],
   );
-  return rows.map((row) => toEngineOrder(row, row.grade ?? undefined));
+  const byRelease = new Map();
+  for (const row of rows) {
+    const orders = byRelease.get(row.release_id) ?? [];
+    orders.push(toEngineOrder(row, row.grade ?? undefined));
+    byRelease.set(row.release_id, orders);
+  }
+  return byRelease;
 }
 
 /** @returns {Promise<{ cash: string, held: string, spendable: string }>} */

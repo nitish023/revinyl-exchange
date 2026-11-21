@@ -1,14 +1,17 @@
-/** Starts the server: check settings, update the database, listen. */
+/** Starts the server: check settings, update the database, rebuild the order books, listen. */
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createContext } from './context.js';
 import { migrate } from './db/migrate.js';
+import { recoverExchange } from './recovery.js';
 
 const config = loadConfig();
 const ctx = createContext(config);
 
 const applied = await migrate(ctx.pool);
 if (applied.length) console.log(`[db] applied migrations: ${applied.join(', ')}`);
+// Before listening, so no order can arrive while the books are being rebuilt.
+await recoverExchange(ctx);
 
 const server = createApp(ctx).listen(config.PORT, () => {
   console.log(`[http] listening on http://localhost:${config.PORT} (${config.NODE_ENV})`);

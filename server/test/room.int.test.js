@@ -5,10 +5,10 @@
  * (latenight), VG+ $17 (secondspin), VG $10 (harbormaster).
  */
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { DEMO_PASSWORD, DEMO_TRADERS, FIXTURE_RELEASE_ID, seedDemo } from '../src/db/seed.js';
-import { createTestContext, resetDatabase } from './helpers.js';
+import { createTestContext, expectExchangeConsistent, resetDatabase } from './helpers.js';
 
 const ctx = createTestContext();
 const app = createApp(ctx, { rateLimit: false });
@@ -18,6 +18,8 @@ beforeEach(async () => {
   ctx.orders.books.clear();
   await seedDemo(ctx.pool);
 });
+// Part 7: every test must leave the exchange adding up, books and database alike.
+afterEach(() => expectExchangeConsistent(ctx));
 afterAll(() => ctx.pool.end());
 
 async function roomOf(name) {
@@ -110,9 +112,12 @@ describe('wanted ads', () => {
   it('say so when nothing good enough is for sale', async () => {
     const room = await roomOf('latenight'); // wants NM; the only NM copy is $24 from someone else
     expect(room.wanted[0]).toMatchObject({ minGrade: 7, cheapest: '24.00' });
+    // Cancelled as OrderService does it: the ad closes and its copy goes back to the crate.
     await ctx.pool.query(
-      `UPDATE orders SET status = 'cancelled', closed_at = now()
-        WHERE side = 'ask' AND status = 'open' AND price_cents = 2400`,
+      `WITH cancelled AS (
+         UPDATE orders SET status = 'cancelled', closed_at = now()
+          WHERE side = 'ask' AND status = 'open' AND price_cents = 2400 RETURNING copy_id)
+       UPDATE copies SET status = 'in_crate' WHERE id IN (SELECT copy_id FROM cancelled)`,
     );
     expect((await roomOf('latenight')).wanted[0].cheapest).toBeNull();
   });

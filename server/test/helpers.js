@@ -14,9 +14,13 @@ import collectionFixture from '../src/catalog/fixtures/collection-page.json' wit
 import fieldsFixture from '../src/catalog/fixtures/collection-fields.json' with { type: 'json' };
 import releaseFixture from '../src/catalog/fixtures/release-249504.json' with { type: 'json' };
 import searchFixture from '../src/catalog/fixtures/search-astley.json' with { type: 'json' };
+import { expect } from 'vitest';
 import { loadConfig } from '../src/config.js';
 import { createPool } from '../src/db/pool.js';
 import { LiveUpdates } from '../src/market/live.js';
+import { OrderBook } from '../src/market/orderBook.js';
+import { findBrokenRules } from '../src/orders/exchangeRules.js';
+import { loadOpenOrders } from '../src/orders/orderRows.js';
 import { CollectionImport } from '../src/collection/importService.js';
 import { OrderService } from '../src/orders/orderService.js';
 import { TradeService } from '../src/trades/tradeService.js';
@@ -116,4 +120,31 @@ export function createTestContext() {
 export async function resetDatabase(pool) {
   await pool.query(`TRUNCATE users, sessions, releases, copies, copy_photos, orders, trades
      RESTART IDENTITY CASCADE`);
+}
+
+/** What a book holds, both sides, best first: for comparing two books. */
+export const bookContents = (book) => ({ asks: book.asks(), bids: book.bids() });
+
+/** A pressing's book exactly as the database's open orders build it. */
+export async function bookFromDatabase(pool, releaseId) {
+  const book = new OrderBook(releaseId);
+  for (const order of (await loadOpenOrders(pool, releaseId)).get(releaseId) ?? []) {
+    book.add(order);
+  }
+  return bookContents(book);
+}
+
+/**
+ * Run after every market test (Part 7): the exchange's rules hold in the database, and
+ * every book the order service has in memory says the same as the database. A failure
+ * lists the broken rules or shows the book that drifted.
+ * @param {ReturnType<typeof createTestContext>} ctx
+ */
+export async function expectExchangeConsistent(ctx) {
+  expect(await findBrokenRules(ctx.pool)).toEqual([]);
+  for (const [releaseId, book] of ctx.orders.books) {
+    expect(bookContents(book), `the book for ${releaseId}`).toEqual(
+      await bookFromDatabase(ctx.pool, releaseId),
+    );
+  }
 }

@@ -16,6 +16,7 @@
     "db:down": "docker compose down",
     "db:migrate": "node --env-file-if-exists=.env server/src/db/migrate.js",
     "db:seed": "node --env-file-if-exists=.env server/src/db/seed.js",
+    "db:check": "node --env-file-if-exists=.env server/src/orders/exchangeRules.js",
     "test": "vitest run --project unit --project client",
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
