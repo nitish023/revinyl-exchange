@@ -8,6 +8,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { authenticate } from './auth/middleware.js';
 import { analyticsRouter } from './analytics/routes.js';
+import { auctionsRouter } from './auctions/routes.js';
 import { authRouter } from './auth/routes.js';
 import { catalogRouter } from './catalog/routes.js';
 import { collectionRouter } from './collection/routes.js';
@@ -59,6 +60,7 @@ export function createApp(ctx, { rateLimit = true } = {}) {
   app.use('/api', catalogRouter(ctx, { rateLimit }));
   app.use('/api', marketRouter(ctx));
   app.use('/api', analyticsRouter(ctx));
+  app.use('/api', auctionsRouter(ctx, { rateLimit }));
   app.use('/api', crateRouter(ctx, { rateLimit }));
   app.use('/api', ordersRouter(ctx, { rateLimit }));
   app.use('/api', tradesRouter(ctx, { rateLimit }));

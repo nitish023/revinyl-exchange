@@ -3,6 +3,7 @@
  * serves saved responses, so tests never call the real API.
  */
 import { PricingService } from '../src/analytics/pricingService.js';
+import { AuctionService } from '../src/auctions/auctionService.js';
 import { CatalogService } from '../src/catalog/catalogService.js';
 import { DiscogsUnavailableError } from '../src/catalog/discogsClient.js';
 import {
@@ -116,12 +117,24 @@ export function createTestContext() {
   const collection = new CollectionImport({ pool, source: catalogSource });
   // No caching in tests: every request sees the data the test just wrote.
   const pricing = new PricingService({ pool, ttlMs: 0 });
-  return { config, pool, catalog, catalogSource, live, orders, trades, collection, pricing };
+  const auctions = new AuctionService({ pool, live });
+  return {
+    config,
+    pool,
+    catalog,
+    catalogSource,
+    live,
+    orders,
+    trades,
+    collection,
+    pricing,
+    auctions,
+  };
 }
 
 /** Empty every table between tests (keeps the schema). */
 export async function resetDatabase(pool) {
-  await pool.query(`TRUNCATE users, sessions, releases, copies, copy_photos, orders, trades
+  await pool.query(`TRUNCATE users, sessions, releases, copies, copy_photos, orders, trades, auctions, auction_bids
      RESTART IDENTITY CASCADE`);
 }
 

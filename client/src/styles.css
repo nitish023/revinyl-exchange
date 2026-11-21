@@ -1758,6 +1758,38 @@ select.input {
   font-weight: 700;
 }
 
+/* Part 16: auctions. */
+.auction-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.auction-card {
+  padding: 14px 0;
+  border-bottom: 1px dotted var(--rule-dotted);
+  font-family: var(--font-label);
+  font-size: 14px;
+}
+.auction-lead {
+  margin: 0;
+  font-size: 15px;
+}
+.auction-bid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+.auction-bid .input {
+  width: 9em;
+}
+.auction-bid .button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 11px;
+}
+
 /* Part 14: the price history and the book. One ink, like everything else in the paper. */
 .chart {
   display: block;

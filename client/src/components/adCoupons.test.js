@@ -60,13 +60,14 @@ describe('adCoupons', () => {
     expect(element.querySelector('form')).toBeNull();
   });
 
-  it('shows the three coupons and only offers copies that are in the crate', async () => {
+  it('shows the four coupons and only offers copies that are in the crate', async () => {
     const { element } = await render();
 
     expect([...element.querySelectorAll('.coupon-title')].map((node) => node.textContent)).toEqual([
       'Add a copy to your crate',
       'Sell your copy',
       'Run your own ad',
+      'Auction your copy', // Part 16
     ]);
     const options = [...element.querySelectorAll('#sell-copy-copyId option')];
     expect(options.map((option) => option.textContent)).toEqual(['VG+/VG · Plays clean.']);
@@ -219,7 +220,7 @@ describe('adCoupons', () => {
     );
     element.querySelector('.state-error button').click();
     await settle();
-    expect(element.querySelectorAll('form')).toHaveLength(3);
+    expect(element.querySelectorAll('form')).toHaveLength(4);
   });
 });
 

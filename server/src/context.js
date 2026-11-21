@@ -3,6 +3,7 @@
  * Tests build their own context with a fake Discogs (server/test/helpers.js).
  */
 import { PricingService } from './analytics/pricingService.js';
+import { AuctionService } from './auctions/auctionService.js';
 import { CatalogService } from './catalog/catalogService.js';
 import { DiscogsClient } from './catalog/discogsClient.js';
 import { RateWindow } from './catalog/rateWindow.js';
@@ -25,6 +26,7 @@ import { TradeService } from './trades/tradeService.js';
  * @property {TradeService} trades ships, completes and refunds trades
  * @property {CollectionImport} collection previews and imports Discogs collections
  * @property {PricingService} pricing fair value per grade and the chance of selling (Part 13)
+ * @property {AuctionService} auctions sealed-bid second-price auctions (Part 16)
  */
 
 /** @param {import('./config.js').Config} config @returns {AppContext} */
@@ -60,5 +62,6 @@ export function createContext(config) {
     trades: new TradeService({ pool, live }),
     collection: new CollectionImport({ pool, source: discogs }),
     pricing: new PricingService({ pool }),
+    auctions: new AuctionService({ pool, live }),
   };
 }

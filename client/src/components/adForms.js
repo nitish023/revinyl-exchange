@@ -5,6 +5,7 @@
  */
 import {
   addCopySchema,
+  AUCTION_DAYS,
   CONDITION_FLAGS,
   formatCents,
   gradeByRank,
@@ -18,6 +19,7 @@ import {
   parseDollars,
   PHOTO_TYPES,
   placeOrderSchema,
+  startAuctionSchema,
 } from '../../../shared/index.js';
 import { h } from '../dom.js';
 import { api, ApiError } from '../lib/api.js';
@@ -25,6 +27,62 @@ import { payoutLine } from '../lib/fees.js';
 import { chanceLine, fairFor, fairLine, suggestionChips } from '../lib/pricing.js';
 import { adSettings } from './adSettings.js';
 import { couponForm } from './couponForm.js';
+
+/**
+ * "Auction your copy" (Part 16): one of your copies in the crate, a reserve and how long it
+ * runs. Bids are sealed; the highest wins and pays the second-highest (or the reserve).
+ * @param {{ copies: object[], onDone: (message: string) => Promise<void> }} options
+ * @returns {HTMLElement | null} null with nothing in the crate to auction
+ */
+export function auctionForm({ copies, onDone }) {
+  if (copies.length === 0) return null;
+  const copy = h(
+    'select',
+    { class: 'input' },
+    copies.length > 1 ? h('option', { value: '' }, 'Choose a copy…') : null,
+    copies.map((item) =>
+      h(
+        'option',
+        { value: String(item.id) },
+        item.headline ? `${item.condition} · ${item.headline}` : item.condition,
+      ),
+    ),
+  );
+  const reserve = priceInput();
+  const days = h(
+    'select',
+    { class: 'input' },
+    AUCTION_DAYS.map((count) =>
+      h('option', { value: String(count) }, `${count} ${count === 1 ? 'day' : 'days'}`),
+    ),
+  );
+  days.value = '3';
+  const form = couponForm({
+    id: 'auction-copy',
+    title: 'Auction your copy',
+    intro:
+      'Set the lowest price you’ll take. Bidders can’t see each other’s bids; the highest wins and pays the second-highest bid, or your reserve.',
+    submitLabel: 'Start my auction',
+    schema: startAuctionSchema,
+    fields: [
+      { name: 'copyId', label: 'Copy', control: copy },
+      { name: 'reserve', label: 'Reserve ($)', control: reserve },
+      { name: 'days', label: 'Runs for', control: days },
+    ],
+    collect: () => ({
+      copyId: idOf(copy.value) ?? (copies.length === 1 ? copies[0].id : undefined),
+      reserve: reserve.value,
+      days: Number(days.value),
+    }),
+    onSubmit: async (values) => {
+      const { auction } = await api.startAuction(values);
+      await onDone(
+        `Your auction is up, with a $${auction.reserve} reserve. Bids are sealed until it ends.`,
+      );
+    },
+  });
+  return form.element;
+}
 
 /** Mint first: that's how the grade scale reads in record shops. */
 const BEST_FIRST = [...GRADES].reverse();

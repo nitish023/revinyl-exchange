@@ -21,8 +21,16 @@ ctx.live.attach(server);
 
 // Part 15: expire ads whose time is up, once at start and then every minute. (An ad also
 // expires on time whenever its pressing next trades; this covers quiet pressings.)
+// Part 16: ended auctions settle on the same sweep.
 const sweepExpired = () =>
-  ctx.orders.sweepExpired().catch((error) => console.error('[orders] expiry sweep failed:', error));
+  Promise.all([
+    ctx.orders
+      .sweepExpired()
+      .catch((error) => console.error('[orders] expiry sweep failed:', error)),
+    ctx.auctions
+      .settleDue()
+      .catch((error) => console.error('[auctions] settling ended auctions failed:', error)),
+  ]);
 void sweepExpired();
 const sweeper = setInterval(sweepExpired, 60_000);
 sweeper.unref();

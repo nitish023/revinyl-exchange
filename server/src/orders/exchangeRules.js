@@ -123,17 +123,69 @@ const RULES = {
       `${row.refunds} refunds, or one of them went to the wrong person or amount.`,
   },
 
-  // Held cash is exactly what your open WANTED ads would cost.
+  // Held cash is exactly what your open WANTED ads and live auction bids would cost.
   holds: {
-    sql: `SELECT u.id, u.held_cents, coalesce(sum(o.price_cents), 0)::bigint AS open_bids
-            FROM users u
-            LEFT JOIN orders o ON o.user_id = u.id AND o.side = 'bid' AND o.status = 'open'
-           GROUP BY u.id
-          HAVING u.held_cents <> coalesce(sum(o.price_cents), 0)
-           ORDER BY u.id LIMIT ${MAX_EXAMPLES}`,
+    sql: `SELECT id, held_cents, open_bids
+            FROM (SELECT u.id, u.held_cents,
+                         (coalesce((SELECT sum(o.price_cents) FROM orders o
+                                     WHERE o.user_id = u.id AND o.side = 'bid' AND o.status = 'open'), 0)
+                          + coalesce((SELECT sum(b.amount_cents) FROM auction_bids b
+                                       WHERE b.bidder_id = u.id AND b.status = 'active'), 0))::bigint
+                           AS open_bids
+                    FROM users u) wallets
+           WHERE held_cents <> open_bids
+           ORDER BY id LIMIT ${MAX_EXAMPLES}`,
     describe: (row) =>
-      `User ${row.id} has $${formatCents(row.held_cents)} held, but their open wanted ads ` +
-      `add up to $${formatCents(row.open_bids)}.`,
+      `User ${row.id} has $${formatCents(row.held_cents)} held, but their open wanted ads and ` +
+      `auction bids add up to $${formatCents(row.open_bids)}.`,
+  },
+
+  // Part 16: a copy is up for auction exactly when one open auction has it, and it's the
+  // seller's own.
+  auctionCopies: {
+    sql: `SELECT c.id, c.status, count(a.id) AS open_auctions
+            FROM copies c
+            LEFT JOIN auctions a ON a.copy_id = c.id AND a.status = 'open' AND a.seller_id = c.owner_id
+           GROUP BY c.id
+          HAVING (c.status = 'in_auction') <> (count(a.id) = 1)
+           ORDER BY c.id LIMIT ${MAX_EXAMPLES}`,
+    describe: (row) =>
+      `Copy ${row.id} is ${row.status} with ${row.open_auctions} open auctions of its owner's (in_auction means exactly 1).`,
+  },
+
+  // Part 16: an auction's bids are live exactly while it's open, and every live bid meets
+  // the reserve.
+  auctionBids: {
+    sql: `SELECT b.id, b.status, a.status AS auction_status
+            FROM auction_bids b JOIN auctions a ON a.id = b.auction_id
+           WHERE (b.status = 'active') <> (a.status = 'open')
+              OR (b.status = 'active' AND b.amount_cents < a.reserve_cents)
+           ORDER BY b.id LIMIT ${MAX_EXAMPLES}`,
+    describe: (row) =>
+      `Auction bid ${row.id} is ${row.status} on an auction that is ${row.auction_status}, or is under its reserve.`,
+  },
+
+  // Part 16: a sold auction went to its highest bid, at the second-highest bid or the
+  // reserve, whichever is more (ties go to the earlier bid).
+  auctionPrices: {
+    sql: `SELECT a.id, t.price_cents, t.buyer_id, w.bidder_id AS winner,
+                 greatest(a.reserve_cents, coalesce(
+                   (SELECT max(b.amount_cents) FROM auction_bids b
+                     WHERE b.auction_id = a.id AND b.id <> w.id), a.reserve_cents)) AS clearing
+            FROM auctions a
+            JOIN trades t ON t.id = a.trade_id
+            JOIN LATERAL (SELECT b.id, b.bidder_id FROM auction_bids b WHERE b.auction_id = a.id
+                           ORDER BY b.amount_cents DESC, b.created_at, b.id LIMIT 1) w ON true
+           WHERE a.status = 'sold'
+             AND (t.buyer_id <> w.bidder_id
+                  OR t.price_cents <> greatest(a.reserve_cents, coalesce(
+                       (SELECT max(b.amount_cents) FROM auction_bids b
+                         WHERE b.auction_id = a.id AND b.id <> w.id), a.reserve_cents))
+                  OR NOT EXISTS (SELECT 1 FROM auction_bids b WHERE b.id = w.id AND b.status = 'won'))
+           ORDER BY a.id LIMIT ${MAX_EXAMPLES}`,
+    describe: (row) =>
+      `Auction ${row.id} sold to user ${row.buyer_id} for $${formatCents(row.price_cents)}, but ` +
+      `user ${row.winner} won it at $${formatCents(row.clearing)}.`,
   },
 
   // A copy is `listed` exactly when it has one open FOR SALE ad.

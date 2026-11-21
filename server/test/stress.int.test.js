@@ -154,6 +154,32 @@ async function act(action, traders) {
       }
       return service.sweepExpired();
     }
+    case 'auction': {
+      // Part 16: put a copy from the crate up for a sealed-bid auction.
+      const copies = await query(
+        `SELECT id FROM copies WHERE owner_id = $1 AND status = 'in_crate' ORDER BY id`,
+        [user.id],
+      );
+      const copy = pick(copies, action.seed);
+      return copy && ctx.auctions.start(user, { copyId: copy.id, reserve: price, days: 1 });
+    }
+    case 'auctionBid': {
+      const open = await query(`SELECT id FROM auctions WHERE status = 'open' ORDER BY id`);
+      const auction = pick(open, action.seed);
+      return auction && ctx.auctions.bid(user, auction.id, { amount: price });
+    }
+    case 'auctionEnd': {
+      const open = await query(`SELECT id FROM auctions WHERE status = 'open' ORDER BY id`);
+      const auction = pick(open, action.seed);
+      if (auction) {
+        await query(
+          `UPDATE auctions SET created_at = now() - interval '2 days', ends_at = now() - interval '1 minute'
+            WHERE id = $1 AND status = 'open'`,
+          [auction.id],
+        );
+      }
+      return ctx.auctions.settleDue();
+    }
     case 'buy': {
       const asks = await query(
         `SELECT id FROM orders WHERE side = 'ask' AND status = 'open' AND user_id <> $1
@@ -210,7 +236,21 @@ async function act(action, traders) {
 }
 
 const actionArb = fc.record({
-  kind: fc.constantFrom('bid', 'list', 'list', 'buy', 'sell', 'cancel', 'step', 'step', 'expire'),
+  kind: fc.constantFrom(
+    'bid',
+    'list',
+    'list',
+    'buy',
+    'sell',
+    'cancel',
+    'step',
+    'step',
+    'expire',
+    'auction',
+    'auctionBid',
+    'auctionBid',
+    'auctionEnd',
+  ),
   trader: fc.nat({ max: TRADERS - 1 }),
   process: fc.nat({ max: 1 }),
   pressing: fc.nat({ max: 1 }),

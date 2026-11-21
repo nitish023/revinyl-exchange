@@ -1,4 +1,5 @@
 import { appraisalSection } from '../components/appraisal.js';
+import { auctionsSection } from '../components/auctions.js';
 import { priceHistorySection } from '../components/priceHistory.js';
 import { cover } from '../components/cover.js';
 import { marketSection } from '../components/market.js';
@@ -198,7 +199,16 @@ export const releasePage = (ctx) => {
       // every change to the market (gathered for a second, so a burst is one request).
       const appraisal = appraisalSection({ releaseId: release.id, signal: ctx.signal });
       const history = priceHistorySection({ releaseId: release.id, signal: ctx.signal });
-      const refreshHistory = debounce(history.refresh, 1000);
+      // Part 16: auctions; their bid counts and results move with the market too.
+      const auctions = auctionsSection({
+        releaseId: release.id,
+        user: () => session.user,
+        signal: ctx.signal,
+      });
+      const refreshHistory = debounce(() => {
+        history.refresh();
+        auctions.refresh();
+      }, 1000);
       ctx.signal.addEventListener('abort', () => refreshHistory.cancel(), { once: true });
       let lastSale = null;
       const onMarket = (next) => {
@@ -207,7 +217,7 @@ export const releasePage = (ctx) => {
         if (lastSale !== null && sale !== lastSale) appraisal.refresh();
         lastSale = sale;
       };
-      replaceChildren(root, releaseView(release, market, [appraisal, history]));
+      replaceChildren(root, releaseView(release, market, [auctions, appraisal, history]));
       following = followMarket(release, market, onMarket, ctx.signal);
     } catch (error) {
       if (isAbortError(error) || ctx.signal.aborted) return;

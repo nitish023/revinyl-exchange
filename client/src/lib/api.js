@@ -80,6 +80,15 @@ export const api = {
   market: (id, signal) => request('GET', `/releases/${id}/market`, signal ? { signal } : {}),
   /** Fair value per grade and the time-to-sale model (Part 13). */
   pricing: (id, signal) => request('GET', `/releases/${id}/pricing`, signal ? { signal } : {}),
+  /** A pressing's open sealed-bid auctions and recent results (Part 16). */
+  auctions: (releaseId, signal) =>
+    request('GET', `/releases/${releaseId}/auctions`, signal ? { signal } : {}),
+  /** Put a copy from your crate up for auction: { copyId, reserve, days }. */
+  startAuction: (input) => request('POST', '/auctions', { body: input }),
+  /** A sealed bid, or a higher one to replace yours. */
+  auctionBid: (auctionId, amount) =>
+    request('POST', `/auctions/${auctionId}/bids`, { body: { amount } }),
+  cancelAuction: (auctionId) => request('DELETE', `/auctions/${auctionId}`),
   /** Daily candles in VG+ terms, their stats, and the book as depth (Part 14). */
   history: (id, signal) => request('GET', `/releases/${id}/history`, signal ? { signal } : {}),
 

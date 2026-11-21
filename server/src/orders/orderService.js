@@ -850,8 +850,11 @@ async function answerBid(client, userId, copyId, bid) {
     const message = 'That copy is a different pressing from this wanted ad.';
     throw new AppError(400, 'WRONG_PRESSING', message, { copyId: message });
   }
-  if (copy.status === 'in_trade') {
-    const message = 'That copy is already in a trade.';
+  if (copy.status === 'in_trade' || copy.status === 'in_auction') {
+    const message =
+      copy.status === 'in_trade'
+        ? 'That copy is already in a trade.'
+        : 'That copy is up for auction.';
     throw new AppError(409, 'COPY_NOT_AVAILABLE', message, { copyId: message });
   }
   if (copy.grade < bid.min_grade) {
