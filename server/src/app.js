@@ -13,6 +13,7 @@ import { collectionRouter } from './collection/routes.js';
 import { crateRouter } from './crate/routes.js';
 import { errorHandler, notFound } from './errors.js';
 import { sameOrigin } from './http/sameOrigin.js';
+import { ledgerRouter } from './ledger/routes.js';
 import { marketRouter } from './market/routes.js';
 import { ordersRouter } from './orders/routes.js';
 import { roomRouter } from './room/routes.js';
@@ -60,6 +61,7 @@ export function createApp(ctx, { rateLimit = true } = {}) {
   app.use('/api', tradesRouter(ctx, { rateLimit }));
   app.use('/api', collectionRouter(ctx, { rateLimit }));
   app.use('/api', roomRouter(ctx));
+  app.use('/api', ledgerRouter(ctx));
   app.use('/api', (_req, _res, next) => next(notFound('Endpoint')));
 
   if (ctx.config.isProduction && existsSync(CLIENT_DIST)) {

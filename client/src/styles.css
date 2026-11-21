@@ -32,6 +32,11 @@
 
 /* ---------- Base ---------- */
 
+/* The hidden attribute always wins, even over components that set their own display. */
+[hidden] {
+  display: none !important;
+}
+
 *,
 *::before,
 *::after {
@@ -1675,6 +1680,26 @@ select.input {
 }
 .ledger-open td {
   font-weight: 700;
+}
+
+/* The ledger's statement (your cash, line by line) and reVINYL's books. */
+.room-statement {
+  margin-top: var(--space-section);
+}
+.statement-table td:nth-child(n + 3),
+.statement-table th:nth-child(n + 3) {
+  text-align: right;
+}
+.room-statement .button {
+  margin-top: 16px;
+}
+.statement-books {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-head);
+  font-style: italic;
+  font-size: 14px;
 }
 
 /* ---------- Bring in your Discogs collection ---------- */

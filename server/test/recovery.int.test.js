@@ -107,10 +107,20 @@ describe('the exchange rules (findBrokenRules)', () => {
     expect(await findBrokenRules(ctx.pool)).toEqual([]);
   });
 
-  // Each one breaks exactly one rule, the way a bug or a careless hand fix could.
+  // Each one breaks the data the way a bug or a careless hand fix could, and is caught by
+  // exactly the rules listed (space-separated, in the order they're checked).
   it.each([
     [
-      'money',
+      'ledgerBalanced money escrowMatchesTrades',
+      'a ledger entry is added that doesn’t balance',
+      () => [
+        `INSERT INTO ledger_entries (journal_id, account, amount_cents)
+         SELECT max(id), 'escrow', 100 FROM ledger_journals`,
+        [],
+      ],
+    ],
+    [
+      'money cashMatchesLedger',
       'a user is given $1 from nowhere',
       (s) => ['UPDATE users SET cash_cents = cash_cents + 100 WHERE id = $1', [s.ana.id]],
     ],
@@ -145,7 +155,7 @@ describe('the exchange rules (findBrokenRules)', () => {
       (s) => [`UPDATE orders SET status = 'filled' WHERE id = $1`, [s.cancelled.id]],
     ],
     [
-      'tradesMatchOrders',
+      'tradeJournals tradesMatchOrders',
       'a trade’s price is more than the buyer offered',
       (s) => ['UPDATE trades SET price_cents = price_cents + 100 WHERE id = $1', [s.completed.id]],
     ],
@@ -154,11 +164,11 @@ describe('the exchange rules (findBrokenRules)', () => {
       'a FOR SALE ad drops below an open WANTED ad’s price',
       (s) => ['UPDATE orders SET price_cents = 1500 WHERE id = $1', [s.forSale.order.id]],
     ],
-  ])('%s catches it when %s', async (rule, _what, breakIt) => {
+  ])('%s catches it when %s', async (rules, _what, breakIt) => {
     const state = await busyExchange();
     expect(await findBrokenRules(ctx.pool)).toEqual([]);
     const broken = await brokenAfter(...breakIt(state));
-    expect(broken.map((problem) => problem.rule)).toEqual([rule]);
+    expect(broken.map((problem) => problem.rule)).toEqual(rules.split(' '));
     expect(broken[0].detail).toMatch(/\d/); // names the ids or amounts to look at
   });
 });
@@ -246,10 +256,10 @@ describe('restarting the server (recoverExchange)', () => {
 
     const log = quiet();
     const summary = await recoverExchange(restart(), log);
-    expect(summary.broken.map((problem) => problem.rule)).toEqual(['money']);
+    expect(summary.broken.map((problem) => problem.rule)).toEqual(['money', 'cashMatchesLedger']);
     expect(summary.books).toBe(1);
     expect(log.error).toHaveBeenCalledWith(expect.stringMatching(/^\[check\] money: /));
-    expect(log.error).toHaveBeenCalledWith('[check] 1 problems found; see above');
+    expect(log.error).toHaveBeenCalledWith('[check] 2 problems found; see above');
   });
 
   it('leaves out a pressing whose orders the engine refuses, so it stops trading until fixed', async () => {

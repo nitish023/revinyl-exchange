@@ -113,6 +113,15 @@ export const api = {
   tradeStep: (tradeId, step) => request('POST', `/trades/${tradeId}/${step}`, { body: {} }),
 
   room: (signal) => request('GET', '/room', signal ? { signal } : {}),
+  /** One page of your cash statement, newest first; `before` pages back from a journal id. */
+  statement: (before, signal) =>
+    request(
+      'GET',
+      before ? `/wallet/statement?before=${before}` : '/wallet/statement',
+      signal ? { signal } : {},
+    ),
+  /** reVINYL's books: issued, in wallets, in escrow and fees (anyone can read them). */
+  books: (signal) => request('GET', '/books', signal ? { signal } : {}),
   collectionPreview: (username, signal) =>
     request(
       'GET',

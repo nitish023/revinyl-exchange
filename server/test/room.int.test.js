@@ -7,7 +7,9 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
+import { withTransaction } from '../src/db/pool.js';
 import { DEMO_PASSWORD, DEMO_TRADERS, FIXTURE_RELEASE_ID, seedDemo } from '../src/db/seed.js';
+import { postJournal, tradeJournals } from '../src/ledger/ledger.js';
 import { createTestContext, expectExchangeConsistent, resetDatabase } from './helpers.js';
 
 const ctx = createTestContext();
@@ -128,7 +130,7 @@ describe('the ledger', () => {
     expect((await roomOf('groovegarden')).ledgerMore).toBe(false);
     const [buyer, seller] = [await idOf('groovegarden'), await idOf('paperlantern')];
     // 50 more finished trades, written straight in: only the ledger reads them.
-    await ctx.pool.query(
+    const { rows: trades } = await ctx.pool.query(
       `WITH c AS (INSERT INTO copies (owner_id, release_id, grade)
                   SELECT $1, $3, 6 FROM generate_series(1, 50) RETURNING id),
             o AS (SELECT id AS copy_id, row_number() OVER () AS n FROM c),
@@ -141,9 +143,17 @@ describe('the ledger', () => {
                          JOIN (SELECT *, row_number() OVER (ORDER BY id) AS n FROM bids) b USING (n))
        INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
                            buyer_id, seller_id, status)
-       SELECT $3, copy_id, 6, 1000, bid_id, ask_id, $1, $2, 'completed' FROM paired`,
+       SELECT $3, copy_id, 6, 1000, bid_id, ask_id, $1, $2, 'completed' FROM paired
+       RETURNING *`,
       [buyer, seller, FIXTURE_RELEASE_ID],
     );
+    // Their money moves through the ledger, as a real sale's would.
+    await withTransaction(ctx.pool, async (client) => {
+      for (const trade of trades) {
+        await postJournal(client, tradeJournals.payment(trade));
+        await postJournal(client, tradeJournals.payout(trade));
+      }
+    });
     const room = await roomOf('groovegarden');
     expect(room.ledger).toHaveLength(50);
     expect(room.ledgerMore).toBe(true);

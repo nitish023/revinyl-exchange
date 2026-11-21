@@ -5,7 +5,9 @@
  */
 import request from 'supertest';
 import { vi } from 'vitest';
+import { withTransaction } from '../src/db/pool.js';
 import { FIXTURE_RELEASE_ID } from '../src/db/seed.js';
+import { postJournal } from '../src/ledger/ledger.js';
 
 export const RELEASE = FIXTURE_RELEASE_ID;
 export const VG = 5;
@@ -76,13 +78,24 @@ export function traders(ctx, app) {
        VALUES ('elsewhere@example.com', 'elsewhere', 'not-a-login')
        ON CONFLICT DO NOTHING`,
     );
-    await query(
-      `UPDATE users SET cash_cents = cash_cents
-                        + (SELECT cash_cents - $2 FROM users WHERE id = $1)
-        WHERE email = 'elsewhere@example.com'`,
-      [user.id, cents],
+    const [{ id: elsewhere }] = await query(
+      `SELECT id FROM users WHERE email = 'elsewhere@example.com'`,
     );
-    await query('UPDATE users SET cash_cents = $2 WHERE id = $1', [user.id, cents]);
+    const [{ cash_cents: cash }] = await query('SELECT cash_cents FROM users WHERE id = $1', [
+      user.id,
+    ]);
+    if (cash === cents) return;
+    // Through the ledger, like any other movement of money.
+    await withTransaction(ctx.pool, (client) =>
+      postJournal(client, {
+        kind: 'adjustment',
+        memo: 'Test: set a wallet',
+        lines: [
+          { account: 'cash', userId: user.id, amountCents: cents - cash },
+          { account: 'cash', userId: elsewhere, amountCents: cash - cents },
+        ],
+      }),
+    );
   }
 
   async function copyStatus(copyId) {

@@ -30,6 +30,7 @@
  */
 import { formatCents, gradeByRank, placeOrderSchema, sellToSchema } from '../../../shared/index.js';
 import { withTransaction } from '../db/pool.js';
+import { postJournal, tradeJournals } from '../ledger/ledger.js';
 import { AppError, notFound } from '../errors.js';
 import { OrderBook } from '../market/orderBook.js';
 import { KeyedSerialQueue } from './keyedSerialQueue.js';
@@ -680,11 +681,14 @@ async function recordTrade(client, incoming, trade, releaseId) {
 
   // A resting bid was holding its price, and a trade against it happens at exactly that
   // price, so the hold and the payment are the same amount. An incoming bid held nothing.
-  const releasedHold = incoming.side === 'ask' ? trade.priceCents : 0;
-  await client.query(
-    `UPDATE users SET held_cents = held_cents - $2, cash_cents = cash_cents - $3 WHERE id = $1`,
-    [trade.buyerId, releasedHold, trade.priceCents],
-  );
+  // The hold is released first, so the payment can't trip the held <= cash check.
+  if (incoming.side === 'ask') {
+    await client.query('UPDATE users SET held_cents = held_cents - $2 WHERE id = $1', [
+      trade.buyerId,
+      trade.priceCents,
+    ]);
+  }
+  await postJournal(client, tradeJournals.payment(rows[0]));
   const { rowCount: copies } = await client.query(
     `UPDATE copies SET status = 'in_trade'
       WHERE id = $1 AND status IN ('in_crate', 'listed') AND removed_at IS NULL`,
