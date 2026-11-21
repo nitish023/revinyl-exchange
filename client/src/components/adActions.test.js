@@ -5,7 +5,7 @@ import { adActions, copiesThatFit, copyChoiceLabel } from './adActions.js';
 
 vi.mock('../lib/api.js', async (importOriginal) => {
   const original = await importOriginal();
-  return { ...original, api: { buy: vi.fn(), sellTo: vi.fn(), crate: vi.fn() } };
+  return { ...original, api: { buy: vi.fn(), sellTo: vi.fn(), crate: vi.fn(), seller: vi.fn() } };
 });
 
 const release = { id: 249504, title: 'Never Gonna Give You Up', artist: 'Rick Astley' };
@@ -122,6 +122,27 @@ describe('adActions', () => {
     await settle();
     expect(api.sellTo).toHaveBeenCalledWith(8, 4);
     expect(onDone).toHaveBeenCalledWith(expect.stringMatching(/^Sold for \$30\.00/));
+  });
+
+  it('says what you’d be paid after your seller fee (Part 12)', async () => {
+    api.crate.mockResolvedValue({ copies: [copy(4, 6)] });
+    api.seller.mockResolvedValue({ standing: { level: 2 } });
+    const { element } = render({ ad: wanted, kind: 'wanted' });
+    element.querySelector('button').click();
+    await settle();
+    expect(element.querySelector('.payout-preview').textContent).toBe(
+      'You get $26.55 after the 11.5% fee (level 2 seller).',
+    );
+  });
+
+  it('still sells when your standing can’t be read, just without the payout line', async () => {
+    api.crate.mockResolvedValue({ copies: [copy(4, 6)] });
+    api.seller.mockRejectedValue(new ApiError(0, 'NETWORK_ERROR', 'offline'));
+    const { element } = render({ ad: wanted, kind: 'wanted' });
+    element.querySelector('button').click();
+    await settle();
+    expect(element.querySelector('select')).not.toBeNull();
+    expect(element.querySelector('.payout-preview')).toBeNull();
   });
 
   it('says so when none of your copies is good enough', async () => {

@@ -49,7 +49,7 @@ describe('GET /api/releases/:id/market', () => {
   it('signs FOR SALE ads with the seller and their completed trades, and never names buyers', async () => {
     const { body } = await request(app).get(marketPath).expect(200);
     const nearMint = body.market.forSale[0].ads[0];
-    expect(nearMint.seller).toEqual({ name: 'secondspin', trades: 2 });
+    expect(nearMint.seller).toEqual({ name: 'secondspin', trades: 2, reliability: 'New seller' });
     for (const ad of body.market.wanted) expect(Object.keys(ad.buyer)).toEqual(['trades']);
     expect(JSON.stringify(body)).not.toContain('@example.com');
   });

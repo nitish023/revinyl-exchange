@@ -39,11 +39,15 @@ export function priceChange(change) {
 
 const plural = (count, word, many = `${word}s`) => `${count} ${count === 1 ? word : many}`;
 
-/** Sellers sign their ads: "groovegarden, 54 trades." A first-timer says so. */
+/**
+ * Sellers sign their ads: "groovegarden, 54 trades, 98% of sales completed." A first-timer says so,
+ * and a seller with too few settled sales to judge leaves the reliability out (Part 12).
+ */
 export function sellerLine(seller) {
-  return seller.trades === 0
-    ? `${seller.name}, new to reVINYL.`
-    : `${seller.name}, ${plural(seller.trades, 'trade')}.`;
+  if (seller.trades === 0) return `${seller.name}, new to reVINYL.`;
+  const reliable =
+    seller.reliability && seller.reliability !== 'New seller' ? `, ${seller.reliability}` : '';
+  return `${seller.name}, ${plural(seller.trades, 'trade')}${reliable}.`;
 }
 
 /** Buyers are never named: "Buyer, 9 trades." */

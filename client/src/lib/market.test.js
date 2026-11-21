@@ -69,6 +69,16 @@ describe('traders', () => {
     expect(sellerLine({ name: 'newbie', trades: 0 })).toBe('newbie, new to reVINYL.');
   });
 
+  it('adds how reliable a seller is, once there are enough settled sales to say', () => {
+    const seller = { name: 'groovegarden', trades: 54 };
+    expect(sellerLine({ ...seller, reliability: '98% of sales completed' })).toBe(
+      'groovegarden, 54 trades, 98% of sales completed.',
+    );
+    expect(sellerLine({ ...seller, trades: 2, reliability: 'New seller' })).toBe(
+      'groovegarden, 2 trades.',
+    );
+  });
+
   it('never names a buyer', () => {
     expect(buyerLine({ trades: 9 })).toBe('Buyer, 9 trades.');
     expect(buyerLine({ trades: 1 })).toBe('Buyer, 1 trade.');

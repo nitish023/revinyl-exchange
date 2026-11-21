@@ -344,7 +344,8 @@ describe('the trade', () => {
 
     expect(response.body.trade).toMatchObject({ status: 'completed', role: 'buyer' });
     expect(Date.parse(response.body.trade.settledAt)).not.toBeNaN();
-    expect(await walletOf(seller)).toMatchObject({ cash: '2040.00', held: '0.00' });
+    // $40 less the 12% fee of a level 1 seller (9% + 3% processing, Part 12).
+    expect(await walletOf(seller)).toMatchObject({ cash: '2035.20', held: '0.00' });
     expect(await walletOf(buyer)).toMatchObject({ cash: '1960.00' });
     expect(await copyRow(copy.id)).toEqual({ owner_id: buyer.id, status: 'in_crate' });
     // It's really theirs now: in their crate, and they can sell it on. The seller can't.
@@ -388,9 +389,9 @@ describe('the trade', () => {
 
     await step(buyer, trade.id, 'refund').expect(200);
 
-    expect(
-      await query('SELECT discogs_instance_id FROM copies WHERE id = $1', [copy.id]),
-    ).toEqual([{ discogs_instance_id: 777 }]);
+    expect(await query('SELECT discogs_instance_id FROM copies WHERE id = $1', [copy.id])).toEqual([
+      { discogs_instance_id: 777 },
+    ]);
   });
 
   it('buyer says not as described after shipping: refunded, the buyer is repaid, the copy goes back', async () => {
@@ -451,7 +452,7 @@ describe('the trade', () => {
     for (const name of ['received', 'refund']) await step(buyer, trade.id, name).expect(409);
 
     // After all that, money moved exactly once.
-    expect(await walletOf(seller)).toMatchObject({ cash: '2040.00' });
+    expect(await walletOf(seller)).toMatchObject({ cash: '2035.20' }); // $40 less the 12% fee
     expect(await walletOf(buyer)).toMatchObject({ cash: '1960.00' });
   });
 
@@ -476,8 +477,8 @@ describe('the trade', () => {
     }
 
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
-    expect(await walletOf(alice)).toMatchObject({ cash: '2015.00' }); // +40 sold, -25 bought
-    expect(await walletOf(bob)).toMatchObject({ cash: '1985.00' });
+    expect(await walletOf(alice)).toMatchObject({ cash: '2010.20' }); // +40 less 12% sold, -25 bought
+    expect(await walletOf(bob)).toMatchObject({ cash: '1982.00' }); // -40 bought, +25 less 12% sold
   });
 
   it('tells buyer and seller, and the market on a refund, only after the commit', async () => {
@@ -614,12 +615,22 @@ describe('money adds up', () => {
           )
         )[0].total,
       );
-    expect((await totalCash()) + (await inTrades())).toBe(start);
+    // And a completed sale's fee goes to reVINYL (Part 12).
+    const fees = async () =>
+      Number(
+        (
+          await query(
+            `SELECT coalesce(sum(amount_cents), 0) AS total FROM ledger_entries WHERE account = 'fees'`,
+          )
+        )[0].total,
+      );
+    expect((await totalCash()) + (await inTrades()) + (await fees())).toBe(start);
     await step(ben, again.id, 'ship').expect(200);
     await step(cy, again.id, 'received').expect(200);
 
     expect(await inTrades()).toBe(0);
-    expect(await totalCash()).toBe(start);
+    expect((await totalCash()) + (await fees())).toBe(start);
+    expect(await fees()).toBe(480 + 732 + 840); // 12% of the $40, $61 and $70 sales
     // Every hold matches an open WANTED ad, and nobody went below zero.
     const users = await query(`SELECT u.cash_cents, u.held_cents,
         coalesce((SELECT sum(price_cents) FROM orders o
@@ -629,6 +640,6 @@ describe('money adds up', () => {
       expect(Number(user.held_cents)).toBe(Number(user.open));
       expect(Number(user.cash_cents)).toBeGreaterThanOrEqual(0);
     }
-    expect(await walletOf(ben)).toMatchObject({ cash: '2030.00' }); // -40 bought, +70 resold
+    expect(await walletOf(ben)).toMatchObject({ cash: '2021.60' }); // -40 bought, +70 less 12% resold
   });
 });

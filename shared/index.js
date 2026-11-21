@@ -5,6 +5,7 @@ export * from './catalog.js';
 export * from './collection.js';
 export * from './copies.js';
 export * from './crate.js';
+export * from './fees.js';
 export * from './grades.js';
 export * from './ledger.js';
 export * from './market.js';

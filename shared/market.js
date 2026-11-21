@@ -31,7 +31,8 @@ export const liveRequestSchema = z.object({
  * @property {string} listedAt ISO date
  * @property {{ id: number, grade: number, sleeveGrade: number | null, condition: string,
  *   flags: string[], headline: string, notes: string, photos: number }} copy
- * @property {{ name: string, trades: number }} seller sellers sign their ads; buyers never do
+ * @property {{ name: string, trades: number, reliability: string }} seller sellers sign their
+ *   ads; buyers never do. reliability is "New seller" or e.g. "98% of sales completed" (Part 12)
  */
 
 /**

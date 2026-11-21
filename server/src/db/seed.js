@@ -16,6 +16,7 @@ import { mapRelease } from '../catalog/discogsMapping.js';
 import releaseFixture from '../catalog/fixtures/release-249504.json' with { type: 'json' };
 import { upsertRelease } from '../catalog/releasesRepo.js';
 import { postJournal, tradeJournals } from '../ledger/ledger.js';
+import { sellerFeeFor } from '../sellers/sellerRecord.js';
 import { withTransaction } from './pool.js';
 
 export const DEMO_PASSWORD = 'password123';
@@ -222,9 +223,22 @@ async function seedRelease(client, releaseId, traders, now) {
     });
     const { rows: trades } = await client.query(
       `INSERT INTO trades (release_id, copy_id, grade, price_cents, bid_order_id, ask_order_id,
-                           buyer_id, seller_id, status, created_at, updated_at, shipped_at, settled_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $9, $9, $9) RETURNING *`,
-      [releaseId, copyId, sale.grade, sale.price, bidId, askId, buyerId, sellerId, sale.at],
+                           buyer_id, seller_id, status, created_at, updated_at, shipped_at, settled_at,
+                           seller_fee_cents)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $9, $9, $9, $10) RETURNING *`,
+      [
+        releaseId,
+        copyId,
+        sale.grade,
+        sale.price,
+        bidId,
+        askId,
+        buyerId,
+        sellerId,
+        sale.at,
+        // The seller's fee at their level then, as a real sale's (Part 12).
+        await sellerFeeFor(client, sellerId, sale.price),
+      ],
     );
     // The money moves through the ledger, as a real sale's would: paid in, then paid out.
     await postJournal(client, { ...tradeJournals.payment(trades[0]), at: sale.at });
