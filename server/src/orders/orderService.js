@@ -14,8 +14,15 @@
  * queue and the same three steps, but may only match the one ad they name, and never rest.
  * Everything about them (price, grade, pressing) is read from that ad, never the request.
  *
- * Locks: a transaction locks at most one wallet (users row) and one copy. A bid locks the
- * buyer's wallet, then the copy it buys; an ask locks its copy, then the buyer's wallet.
+ * More than one server process (Part 7): every order transaction first takes a Postgres
+ * advisory lock for its pressing, so processes take turns too, and bumps the pressing's row
+ * in `book_versions`. A process whose book is at an older version than the database's
+ * reloads it inside the transaction, before matching, so it never matches against orders
+ * another process has already filled or cancelled, and never misses one it added.
+ *
+ * Locks (all FOR NO KEY UPDATE: see tradeService.js for why): besides the pressing's
+ * advisory lock, a transaction locks at most one wallet (users row) and one copy. A bid
+ * locks the buyer's wallet, then the copy it buys; an ask locks its copy, then the buyer's wallet.
  * Those two can only wait on each other for the same copy, which means the same pressing,
  * and the queue never runs two of those at once, so they can't deadlock. Two bids from one
  * person on different pressings take turns on that person's wallet, so the same dollars
@@ -71,6 +78,8 @@ function insufficientFunds(spendableCents, neededCents) {
 export class OrderService {
   /** @type {Map<number, OrderBook>} one book per pressing, loaded from the database on first use */
   books = new Map();
+  /** @type {Map<number, number>} the `book_versions` version each book in `books` reflects */
+  #versions = new Map();
   /** @type {Map<number, Promise<OrderBook>>} books being loaded right now */
   #loading = new Map();
   #queue = new KeyedSerialQueue();
@@ -96,14 +105,29 @@ export class OrderService {
     let loading = this.#loading.get(releaseId);
     if (!loading) {
       loading = (async () => {
+        // Version first, then orders: if another process changes them in between, the book
+        // is newer than its version says, and the next order just reloads it. Never older.
+        const version = (await readVersions(this.pool, releaseId)).get(releaseId) ?? 0;
         const orders = (await loadOpenOrders(this.pool, releaseId)).get(releaseId) ?? [];
         const book = buildBook(releaseId, orders);
-        this.books.set(releaseId, book);
+        this.#keep(book, version);
         return book;
       })().finally(() => this.#loading.delete(releaseId));
       this.#loading.set(releaseId, loading);
     }
     return loading;
+  }
+
+  /**
+   * Whether this process's book for a pressing is at the database's version: false when it
+   * isn't loaded, or another process has changed the pressing's orders since. (A stale book
+   * is reloaded by the next order anyway; this is for tests and diagnostics.)
+   * @param {number} releaseId
+   */
+  async isCurrent(releaseId) {
+    if (!this.books.has(releaseId)) return false;
+    const version = (await readVersions(this.pool, releaseId)).get(releaseId) ?? 0;
+    return this.#versions.get(releaseId) === version;
   }
 
   /**
@@ -119,12 +143,14 @@ export class OrderService {
    * @returns {Promise<{ books: number, orders: number, failed: number[] }>}
    */
   async recover() {
+    const versions = await readVersions(this.pool); // before the orders: see book()
     const byRelease = await loadOpenOrders(this.pool);
     this.books.clear();
+    this.#versions.clear();
     const summary = { books: 0, orders: 0, failed: [] };
     for (const [releaseId, orders] of byRelease) {
       try {
-        this.books.set(releaseId, buildBook(releaseId, orders));
+        this.#keep(buildBook(releaseId, orders), versions.get(releaseId) ?? 0);
         summary.books += 1;
         summary.orders += orders.length;
       } catch (error) {
@@ -251,8 +277,7 @@ export class OrderService {
    * after COMMIT change the book and tell people.
    */
   async #takeInQueue(user, targetId, releaseId, insertOwnSide) {
-    const book = await this.book(releaseId);
-    const saved = await this.#transaction(releaseId, async (client) => {
+    const { saved, book } = await this.#transaction(releaseId, async (client, book) => {
       const target = await lockTarget(client, targetId);
       if (target.user_id === user.id) throw ownAd();
       if (target.status !== 'open') throw targetUnavailable();
@@ -292,8 +317,7 @@ export class OrderService {
   }
 
   async #placeInQueue(user, request, releaseId) {
-    const book = await this.book(releaseId);
-    const saved = await this.#transaction(releaseId, async (client) => {
+    const { saved, book } = await this.#transaction(releaseId, async (client, book) => {
       const order =
         request.side === 'bid'
           ? await insertBid(client, user.id, request)
@@ -349,10 +373,9 @@ export class OrderService {
   }
 
   async #cancelInQueue(user, orderId, releaseId) {
-    const book = await this.book(releaseId);
-    const row = await this.#transaction(releaseId, async (client) => {
+    const { saved: row, book } = await this.#transaction(releaseId, async (client) => {
       const { rows } = await client.query(
-        'SELECT * FROM orders WHERE id = $1 AND user_id = $2 FOR UPDATE',
+        'SELECT * FROM orders WHERE id = $1 AND user_id = $2 FOR NO KEY UPDATE',
         [orderId, user.id],
       );
       if (rows[0].status !== 'open') {
@@ -388,19 +411,55 @@ export class OrderService {
   }
 
   /**
-   * Run `work` in a transaction for one pressing. A refusal (AppError: no money, not your
-   * copy) leaves everything as it was. Any other failure may mean the cached book no longer
-   * matches the database (the trade write found the resting order already closed, say), so
-   * the book is dropped and the next order reloads it. The transaction rolled back, so the
-   * database is still right either way.
+   * Run `work(client, book)` in a transaction for one pressing: take the pressing's advisory
+   * lock, make sure the book is current (reloading it if another process moved the version
+   * on), do the work, and bump the version. After COMMIT the book is kept at the new version;
+   * the caller then applies the change to it.
+   *
+   * A refusal (AppError: no money, not your copy) leaves everything as it was. Any other
+   * failure may mean the cached book no longer matches the database (the trade write found
+   * the resting order already closed, say), so the book is dropped and the next order
+   * reloads it. The transaction rolled back, so the database is still right either way.
+   * @template T
+   * @param {number} releaseId
+   * @param {(client: import('pg').PoolClient, book: OrderBook) => Promise<T>} work
+   * @returns {Promise<{ saved: T, book: OrderBook }>}
    */
   async #transaction(releaseId, work) {
     try {
-      return await withTransaction(this.pool, work);
+      const { saved, book, version } = await withTransaction(this.pool, async (client) => {
+        await client.query('SELECT pg_advisory_xact_lock($1)', [releaseId]);
+        const current = (await readVersions(client, releaseId)).get(releaseId) ?? 0;
+        let book = this.books.get(releaseId);
+        if (!book || this.#versions.get(releaseId) !== current) {
+          // Another process changed this pressing's orders (or it isn't loaded): reload
+          // under the lock, so what we match against is exactly what's open.
+          book = buildBook(
+            releaseId,
+            (await loadOpenOrders(client, releaseId)).get(releaseId) ?? [],
+          );
+        }
+        const saved = await work(client, book);
+        return { saved, book, version: await bumpVersion(client, releaseId) };
+      });
+      this.#keep(book, version);
+      return { saved, book };
     } catch (error) {
-      if (!(error instanceof AppError)) this.books.delete(releaseId);
+      if (!(error instanceof AppError)) this.#forget(releaseId);
       throw error;
     }
+  }
+
+  /** Keep a book as the current one for its pressing, at a `book_versions` version. */
+  #keep(book, version) {
+    this.books.set(book.releaseId, book);
+    this.#versions.set(book.releaseId, version);
+  }
+
+  /** Drop a pressing's book: its next order (or book() call) loads it fresh. */
+  #forget(releaseId) {
+    this.books.delete(releaseId);
+    this.#versions.delete(releaseId);
   }
 
   /**
@@ -412,7 +471,7 @@ export class OrderService {
       change(book);
     } catch (error) {
       console.error(`[orders] book ${book.releaseId} disagreed with the database:`, error);
-      this.books.delete(book.releaseId);
+      this.#forget(book.releaseId);
     }
   }
 
@@ -427,6 +486,29 @@ export class OrderService {
   }
 }
 
+/**
+ * The `book_versions` version of one pressing, or of every pressing.
+ * @returns {Promise<Map<number, number>>}
+ */
+async function readVersions(db, releaseId = null) {
+  const { rows } = await db.query(
+    'SELECT release_id, version FROM book_versions WHERE $1::bigint IS NULL OR release_id = $1',
+    [releaseId],
+  );
+  return new Map(rows.map((row) => [row.release_id, row.version]));
+}
+
+/** Move a pressing's version on by one (from 0 on its first order). Returns the new one. */
+async function bumpVersion(client, releaseId) {
+  const { rows } = await client.query(
+    `INSERT INTO book_versions (release_id, version) VALUES ($1, 1)
+     ON CONFLICT (release_id) DO UPDATE SET version = book_versions.version + 1
+     RETURNING version`,
+    [releaseId],
+  );
+  return rows[0].version;
+}
+
 /** A pressing's book holding these resting orders. Throws if the engine refuses one. */
 function buildBook(releaseId, orders) {
   const book = new OrderBook(releaseId);
@@ -437,7 +519,7 @@ function buildBook(releaseId, orders) {
 /** Lock the buyer's wallet, check they can cover the bid, and insert it. */
 async function insertBid(client, userId, request) {
   const { rows: wallets } = await client.query(
-    'SELECT cash_cents, held_cents FROM users WHERE id = $1 FOR UPDATE',
+    'SELECT cash_cents, held_cents FROM users WHERE id = $1 FOR NO KEY UPDATE',
     [userId],
   );
   const spendable = wallets[0].cash_cents - wallets[0].held_cents;
@@ -455,7 +537,7 @@ async function insertBid(client, userId, request) {
 async function insertAsk(client, userId, request) {
   const { rows: copies } = await client.query(
     `SELECT id, release_id, grade, status FROM copies
-      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR UPDATE`,
+      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR NO KEY UPDATE`,
     [request.copyId, userId],
   );
   if (copies.length === 0) throw notFound('Copy');
@@ -474,7 +556,7 @@ const ownAd = () => new AppError(400, 'OWN_AD', 'That’s your own ad.');
 async function lockTarget(client, orderId) {
   const { rows } = await client.query(
     `SELECT o.*, c.grade FROM orders o LEFT JOIN copies c ON c.id = o.copy_id
-      WHERE o.id = $1 FOR UPDATE OF o`,
+      WHERE o.id = $1 FOR NO KEY UPDATE OF o`,
     [orderId],
   );
   if (rows.length === 0) throw notFound('Ad');
@@ -517,7 +599,7 @@ async function takeAsk(client, ask, userId) {
 async function answerBid(client, userId, copyId, bid) {
   const { rows: copies } = await client.query(
     `SELECT id, release_id, grade, status FROM copies
-      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR UPDATE`,
+      WHERE id = $1 AND owner_id = $2 AND removed_at IS NULL FOR NO KEY UPDATE`,
     [copyId, userId],
   );
   if (copies.length === 0) throw notFound('Copy');

@@ -18,6 +18,13 @@
  * copy. Two trades between the same two people, going opposite ways, therefore can't each
  * hold one wallet and wait for the other. Trades don't touch the order books, so they don't
  * take a turn in the pressing queue.
+ *
+ * Every lock is FOR NO KEY UPDATE, never FOR UPDATE (docs/PROJECT.md, Database). Saving a
+ * trade or an order makes Postgres check its foreign keys, which briefly locks the buyer's
+ * and seller's users rows in KEY SHARE mode. FOR UPDATE blocks that check, so a wallet
+ * locked here could deadlock with an order on another pressing saving a trade for the same
+ * person (the stress tests found exactly that). FOR NO KEY UPDATE still lets only one
+ * transaction change a wallet at a time, but lets the key checks through.
  */
 import { withTransaction } from '../db/pool.js';
 import { AppError, notFound } from '../errors.js';
@@ -141,7 +148,7 @@ export class TradeService {
   async #step(user, tradeId, name) {
     const step = STEPS[name];
     const trade = await withTransaction(this.pool, async (client) => {
-      const { rows } = await client.query('SELECT * FROM trades WHERE id = $1 FOR UPDATE', [
+      const { rows } = await client.query('SELECT * FROM trades WHERE id = $1 FOR NO KEY UPDATE', [
         tradeId,
       ]);
       const row = rows[0];
@@ -157,7 +164,7 @@ export class TradeService {
       if (step.paid) {
         // Both wallets, in id order, before anything changes (see the top of this file).
         await client.query(
-          'SELECT id FROM users WHERE id = ANY($1::bigint[]) ORDER BY id FOR UPDATE',
+          'SELECT id FROM users WHERE id = ANY($1::bigint[]) ORDER BY id FOR NO KEY UPDATE',
           [[row.buyer_id, row.seller_id]],
         );
         await client.query('UPDATE users SET cash_cents = cash_cents + $2 WHERE id = $1', [

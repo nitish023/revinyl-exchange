@@ -30,7 +30,9 @@ Read this before you start a part. If a rule needs to change, change it here in 
   `ctx.live.notifyUser(userId, message)` for private changes. Never before the commit.
 - **Database:** plain SQL with `$1` parameters, never string-built SQL. A schema change is a new numbered file in
   `server/migrations/` (never edit one that has run anywhere). Use `withTransaction` from `server/src/db/pool.js` when
-  more than one write must succeed together.
+  more than one write must succeed together. Lock rows with `FOR NO KEY UPDATE`, never `FOR UPDATE`: inserting a row
+  that references a user, copy or order makes Postgres take a KEY SHARE lock on it, which `FOR UPDATE` blocks, and that
+  deadlocks (Part 7's stress tests found it).
 - **Money** is whole cents as JavaScript numbers (`4050` = $40.50). The API sends prices as strings like `"40.50"`.
   Never use floating-point dollars. Starting play cash is $2,000 (Part 3).
 - **Security:** passwords are hashed with scrypt; the session cookie is httpOnly and SameSite=Lax and the database
@@ -115,7 +117,7 @@ Ten parts, one per person per week. Each part's brief lives in `docs/parts/`.
 | 8    | 4   | Nitish   | The Market: classifieds by grade, wanted ads, Market Report, live updates over WebSocket | ✅ done |
 | 9    | 5   | Sauransh | Buying from an ad, selling to a wanted ad, trade lifecycle (ship, check, refund)         | ✅ done |
 | 9    | 6   | Nitish   | Discogs collection import and the Listening Room (shelf, wanted ads, ledger)             | ✅ done |
-| 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ☐       |
+| 10   | 7   | Sauransh | Restart recovery, concurrency and property-based invariant tests                         | ✅ done |
 | 10   | 8   | Nitish   | Demo bots, the front page (lead record, First Shelf) and the reVINYL 30 chart            | ☐       |
 | 11   | 9   | Sauransh | Security pass and accessibility pass (stretch: mutation testing)                         | ☐       |
 | 11   | 10  | Nitish   | Production deploy, phone layouts, README setup, demo accounts and demo script            | ☐       |

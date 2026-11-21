@@ -168,7 +168,7 @@ export class CollectionImport {
 
     return withTransaction(this.pool, async (client) => {
       // One import at a time per person, so two at once can't both squeeze under the cap.
-      await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
+      await client.query('SELECT id FROM users WHERE id = $1 FOR NO KEY UPDATE', [userId]);
       const imported = await this.#importedInstances(client, userId);
       const todo = chosen.filter(({ item }) => !imported.has(item.instanceId));
       const { rows } = await client.query(
