@@ -1,4 +1,5 @@
 import { gradeScale } from '../components/gradeScale.js';
+import { marketIndexSection } from '../components/marketIndex.js';
 import { searchBox } from '../components/searchBox.js';
 import { h } from '../dom.js';
 import { isSearchable, searchPath } from '../lib/records.js';
@@ -56,6 +57,7 @@ export const homePage = (ctx) => {
         }),
       ),
     ),
+    marketIndexSection({ signal: ctx.signal }),
     h(
       'section',
       { class: 'front-how', 'aria-labelledby': 'how-title' },

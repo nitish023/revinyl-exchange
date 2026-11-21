@@ -80,6 +80,10 @@ export const api = {
   market: (id, signal) => request('GET', `/releases/${id}/market`, signal ? { signal } : {}),
   /** Fair value per grade and the time-to-sale model (Part 13). */
   pricing: (id, signal) => request('GET', `/releases/${id}/pricing`, signal ? { signal } : {}),
+  /** The reVINYL 30 (Part 18). */
+  marketIndex: (signal) => request('GET', '/index', signal ? { signal } : {}),
+  /** Your holdings at fair value, cost basis and gains (Part 18). */
+  portfolio: (signal) => request('GET', '/portfolio', signal ? { signal } : {}),
   /** Sales left out of a pressing's numbers: possible wash trades and outliers (Part 17). */
   integrity: (id, signal) => request('GET', `/releases/${id}/integrity`, signal ? { signal } : {}),
   /** A pressing's open sealed-bid auctions and recent results (Part 16). */

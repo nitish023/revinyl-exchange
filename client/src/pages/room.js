@@ -7,6 +7,7 @@
 import { conditionFlagLabel, gradeByRank } from '../../../shared/index.js';
 import { actionButton } from '../components/actionButton.js';
 import { cover } from '../components/cover.js';
+import { portfolioSection } from '../components/portfolio.js';
 import { standingBox } from '../components/standing.js';
 import { statementSection } from '../components/statement.js';
 import { emptyState, errorState, loadingState } from '../components/states.js';
@@ -257,6 +258,7 @@ function roomView(room, flash, done, signal) {
     standingBox({ signal }),
     shelfSection(room, done),
     h('div', { class: 'room-columns' }, wantedSection(room, done), ledgerSection(room, done)),
+    portfolioSection({ signal }),
     statementSection({ signal }),
   ];
 }

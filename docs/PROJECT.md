@@ -110,6 +110,7 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/releases/:id/pricing` (fair value per grade with 80% ranges, and the time-to-sale model)           | anyone | 13   |
 | GET    | `/api/releases/:id/history` (daily candles in VG+ terms, volatility, 30-day change, book per grade)      | anyone | 14   |
 | GET    | `/api/releases/:id/integrity` (sales set aside: possible wash trades with reasons, and outliers)         | anyone | 17   |
+| GET    | `/api/index` (the reVINYL 30) and `/api/portfolio` (your holdings, cost basis and gains)                 | mixed  | 18   |
 | GET    | `/api/releases/:id/auctions`; `POST /api/auctions`, `/api/auctions/:id/bids`; `DELETE /api/auctions/:id` | mixed  | 16   |
 | WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                                | anyone | 4    |
 
@@ -142,5 +143,5 @@ basic marketplace). Financial ideas from StockX and real exchanges, built on the
 | 15  | Sauransh | Ads that expire, and automatic repricing rules for sellers                               | ✅ done |
 | 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ✅ done |
 | 17  | Sauransh | Market surveillance: wash trading and outlier sales, kept out of prices                  | ✅ done |
-| 18  | Sauransh | The reVINYL 30 index (volume-weighted, divisor-adjusted) and portfolio profit and loss   | ☐       |
+| 18  | Sauransh | The reVINYL 30 index (volume-weighted, divisor-adjusted) and portfolio profit and loss   | ✅ done |
 | 19  | Sauransh | Market-making bots (inventory-aware quotes around fair value) and a market simulation    | ☐       |

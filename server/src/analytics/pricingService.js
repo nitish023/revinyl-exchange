@@ -10,7 +10,7 @@
  */
 import { formatCents, gradeByRank } from '../../../shared/index.js';
 import { fitFairValue, HALF_LIFE_DAYS, pooledGradeStep } from './fairValue.js';
-import { dailyCandles, depthByGrade, priceStats } from './history.js';
+import { dailyCandles, depthByGrade, priceStats, vgPlusEquivalent } from './history.js';
 import { findWashTrades, withoutWashTrades } from './surveillance.js';
 import { fitSaleOdds } from './saleOdds.js';
 
@@ -112,6 +112,44 @@ export class PricingService {
       if (this.#market?.value === value) this.#market = null;
     });
     return value;
+  }
+
+  /**
+   * Part 18: fair value fits for several pressings at once (for a portfolio), with the
+   * market's grade premium as the prior. A pressing with no clean sales maps to null.
+   * @param {number[]} releaseIds
+   * @returns {Promise<Map<number, ReturnType<typeof fitFairValue>>>}
+   */
+  async fairValues(releaseIds) {
+    const now = this.now();
+    const { gradeStep } = await this.#learnFromMarket();
+    const byRelease = await loadSales(this.pool, now);
+    return new Map(
+      releaseIds.map((id) => [
+        id,
+        fitFairValue(byRelease.get(id) ?? [], { now, priorStep: gradeStep }),
+      ]),
+    );
+  }
+
+  /**
+   * Part 18: every clean sale in the window, restated as a VG+ copy with its pressing's own
+   * grade premium, for the reVINYL 30.
+   * @returns {Promise<{ releaseId: number, priceCents: number, at: number }[]>}
+   */
+  async vgPlusSales() {
+    const now = this.now();
+    const { gradeStep: marketStep } = await this.#learnFromMarket();
+    const byRelease = await loadSales(this.pool, now);
+    const restated = [];
+    for (const [releaseId, sales] of byRelease) {
+      const fair = fitFairValue(sales, { now, priorStep: marketStep });
+      const step = fair ? fair.gradeStep : marketStep;
+      for (const sale of sales) {
+        restated.push({ releaseId, priceCents: vgPlusEquivalent(sale, step), at: sale.at });
+      }
+    }
+    return restated;
   }
 
   /**
