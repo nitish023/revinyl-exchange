@@ -106,6 +106,7 @@ canvas (page "The Paper", v2 row). Reuse what's in `client/src/styles.css` inste
 | GET    | `/api/wallet/statement?before=` (your cash, line by line from the ledger, with running balance)       | user   | 11   |
 | GET    | `/api/books` (reVINYL's books: issued, in wallets, in escrow, fees)                                   | anyone | 11   |
 | GET    | `/api/seller` (your level, fee, trust score, last 90 days, and what the next level needs)             | user   | 12   |
+| GET    | `/api/releases/:id/pricing` (fair value per grade with 80% ranges, and the time-to-sale model)        | anyone | 13   |
 | WS     | `/ws` subscribe / unsubscribe to a pressing's market (`shared/market.js`)                             | anyone | 4    |
 
 ## Build plan
@@ -132,7 +133,7 @@ basic marketplace). Financial ideas from StockX and real exchanges, built on the
 | --- | -------- | ---------------------------------------------------------------------------------------- | ------- |
 | 11  | Sauransh | Double-entry ledger: balanced journals, escrow, statement, reVINYL's books               | ✅ done |
 | 12  | Sauransh | Seller fees by level (rolling 90-day volume), Wilson-score reliability, exact payouts    | ✅ done |
-| 13  | Sauransh | Fair value per grade (robust weighted regression), suggested price and chance of selling | ☐       |
+| 13  | Sauransh | Fair value per grade (robust weighted regression), suggested price and chance of selling | ✅ done |
 | 14  | Sauransh | Price history (daily candles, volatility, spread) and the depth chart                    | ☐       |
 | 15  | Sauransh | Ads that expire, and automatic repricing rules for sellers                               | ☐       |
 | 16  | Sauransh | Sealed-bid second-price (Vickrey) auctions for single copies                             | ☐       |

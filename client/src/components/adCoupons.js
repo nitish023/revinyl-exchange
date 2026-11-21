@@ -13,6 +13,7 @@ import { conditionText } from '../../../shared/index.js';
 import { h, replaceChildren } from '../dom.js';
 import { api } from '../lib/api.js';
 import { standingOrNull } from '../lib/fees.js';
+import { pricingOrNull } from '../lib/pricing.js';
 import { errorsFromUnknown } from '../lib/forms.js';
 import { actionButton } from './actionButton.js';
 import { addCopyForm, minGradeText, sellForm, wantedForm } from './adForms.js';
@@ -47,11 +48,12 @@ export function adCoupons({ release, user, onPosted }) {
 
   async function refresh() {
     try {
-      const [{ copies }, { wallet }, { orders }, standing] = await Promise.all([
+      const [{ copies }, { wallet }, { orders }, standing, pricing] = await Promise.all([
         api.crate(release.id),
         api.wallet(),
         api.orders({ status: 'open', releaseId: release.id }),
         standingOrNull(),
+        pricingOrNull(release.id),
       ]);
       replaceChildren(
         body,
@@ -62,6 +64,7 @@ export function adCoupons({ release, user, onPosted }) {
           sellForm({
             copies: copies.filter((copy) => copy.status === 'in_crate'),
             standing,
+            pricing,
             onDone: (message) => finish(message, true),
           }),
           wantedForm({ release, wallet, onDone: (message) => finish(message, true) }),

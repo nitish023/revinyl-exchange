@@ -10,5 +10,6 @@ export * from './grades.js';
 export * from './ledger.js';
 export * from './market.js';
 export * from './orders.js';
+export * from './pricing.js';
 export * from './trades.js';
 export * from './validation.js';

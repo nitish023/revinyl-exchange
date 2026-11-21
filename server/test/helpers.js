@@ -2,6 +2,7 @@
  * Test helpers: a context wired to the test database and a fake Discogs that
  * serves saved responses, so tests never call the real API.
  */
+import { PricingService } from '../src/analytics/pricingService.js';
 import { CatalogService } from '../src/catalog/catalogService.js';
 import { DiscogsUnavailableError } from '../src/catalog/discogsClient.js';
 import {
@@ -113,7 +114,9 @@ export function createTestContext() {
   const orders = new OrderService({ pool, catalog, live });
   const trades = new TradeService({ pool, live });
   const collection = new CollectionImport({ pool, source: catalogSource });
-  return { config, pool, catalog, catalogSource, live, orders, trades, collection };
+  // No caching in tests: every request sees the data the test just wrote.
+  const pricing = new PricingService({ pool, ttlMs: 0 });
+  return { config, pool, catalog, catalogSource, live, orders, trades, collection, pricing };
 }
 
 /** Empty every table between tests (keeps the schema). */

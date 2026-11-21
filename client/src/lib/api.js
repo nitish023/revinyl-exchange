@@ -78,6 +78,8 @@ export const api = {
   },
   release: (id, signal) => request('GET', `/releases/${id}`, signal ? { signal } : {}),
   market: (id, signal) => request('GET', `/releases/${id}/market`, signal ? { signal } : {}),
+  /** Fair value per grade and the time-to-sale model (Part 13). */
+  pricing: (id, signal) => request('GET', `/releases/${id}/pricing`, signal ? { signal } : {}),
 
   wallet: (signal) => request('GET', '/wallet', signal ? { signal } : {}),
   crate: (releaseId, signal) =>

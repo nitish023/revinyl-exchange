@@ -22,6 +22,7 @@ import {
 import { h } from '../dom.js';
 import { api, ApiError } from '../lib/api.js';
 import { payoutLine } from '../lib/fees.js';
+import { chanceLine, fairFor, fairLine, suggestionChips } from '../lib/pricing.js';
 import { couponForm } from './couponForm.js';
 
 /** Mint first: that's how the grade scale reads in record shops. */
@@ -164,10 +165,11 @@ export function addCopyForm({ release, onDone }) {
 /**
  * "Sell your copy": one of your copies of this pressing that's in your crate, and a price.
  * As the price is typed, it says what you'd be paid after your seller fee (Part 12).
- * @param {{ copies: object[], standing?: { level: number } | null,
+ * Part 13: the copy's fair value and suggested prices, and the chance a price sells.
+ * @param {{ copies: object[], standing?: { level: number } | null, pricing?: object | null,
  *   onDone: (message: string) => Promise<void> }} options
  */
-export function sellForm({ copies, standing = null, onDone }) {
+export function sellForm({ copies, standing = null, pricing = null, onDone }) {
   if (copies.length === 0) {
     return h(
       'div',
@@ -214,11 +216,43 @@ export function sellForm({ copies, standing = null, onDone }) {
       );
     },
   });
+  // Part 13: the chosen copy's fair value, three suggested prices, and as you type, the
+  // chance your price sells (and, Part 12, what you're paid after fees).
+  const fair = h('p', { class: 'payout-preview' });
+  const chips = h('div', { class: 'price-chips' });
+  const chance = h('p', { class: 'payout-preview', 'aria-live': 'polite' });
   const payout = h('p', { class: 'payout-preview', 'aria-live': 'polite' });
-  price.addEventListener('input', () => {
+  const chosenGrade = () => {
+    const id = idOf(copy.value) ?? (copies.length === 1 ? copies[0].id : undefined);
+    return copies.find((item) => item.id === id)?.grade;
+  };
+  function update() {
+    const row = fairFor(pricing, chosenGrade());
+    fair.textContent = row ? fairLine(row) : '';
+    chips.replaceChildren(
+      ...suggestionChips(pricing, row).map((chip) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'price-chip',
+            onclick: () => {
+              price.value = chip.price;
+              update();
+            },
+          },
+          chip.label,
+        ),
+      ),
+    );
+    chance.textContent = chanceLine(price.value, pricing, row);
     payout.textContent = payoutLine(price.value, standing);
-  });
-  price.after(payout);
+  }
+  copy.addEventListener('change', update);
+  price.addEventListener('input', update);
+  copy.after(fair, chips);
+  price.after(chance, payout);
+  update();
   return form.element;
 }
 
