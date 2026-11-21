@@ -17,6 +17,7 @@ import { pricingOrNull } from '../lib/pricing.js';
 import { errorsFromUnknown } from '../lib/forms.js';
 import { actionButton } from './actionButton.js';
 import { addCopyForm, minGradeText, sellForm, wantedForm } from './adForms.js';
+import { adSettingsLine } from './adSettings.js';
 import { errorState, loadingState } from './states.js';
 
 /**
@@ -132,11 +133,12 @@ function yourAds(orders, onDone) {
       {},
       orders.map((order) => {
         const { kind, text, price } = adLine(order);
+        const settings = adSettingsLine(order);
         return h(
           'li',
           {},
           h('span', { class: 'label' }, kind),
-          h('span', {}, text),
+          h('span', {}, text, settings ? h('span', { class: 'ledger-side' }, settings) : null),
           h('span', { class: 'your-ad-price' }, price),
           actionButton({
             label: 'Cancel',

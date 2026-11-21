@@ -148,31 +148,110 @@ const priceText = z
   .transform((text) => parseDollars(text))
   .pipe(priceCentsSchema);
 
+/** How long an ad may run before it expires on its own (Part 15). null: until cancelled. */
+export const EXPIRY_DAYS = Object.freeze([7, 30, 60, 90]);
+/** WANTED ads expire after 30 days unless the buyer picks otherwise, like StockX bids. */
+export const DEFAULT_BID_EXPIRY_DAYS = 30;
+
+const blank = (value) => (value === '' ? undefined : value);
+
+const expiresInDaysSchema = z
+  .union([
+    z.null(),
+    z
+      .number({ error: 'Pick how long the ad runs' })
+      .refine((days) => EXPIRY_DAYS.includes(days), 'Pick how long the ad runs'),
+  ])
+  .optional();
+
+/** A repricing step typed by a person ("1.00"): from $0.01 to $100. */
+const stepText = z.preprocess(
+  blank,
+  z
+    .string({ error: 'Enter a step like 1.00' })
+    .transform((text) => parseDollars(text))
+    .pipe(
+      z
+        .number({ error: 'Enter a step like 1.00' })
+        .int('Enter a step like 1.00')
+        .min(1, 'The step must be at least $0.01')
+        .max(10_000, 'The step can’t be more than $100'),
+    )
+    .optional(),
+);
+const limitText = z.preprocess(blank, priceText.optional());
+
+/**
+ * Part 15's "stay on top" rule, checked against the price: a FOR SALE ad's floor can't be
+ * above its price, a WANTED ad's ceiling can't be below it, and step and limit come together.
+ */
+function checkRepricing(side) {
+  return (order, context) => {
+    const hasStep = order.repriceStep !== undefined;
+    const hasLimit = order.repriceLimit !== undefined;
+    if (hasStep !== hasLimit) {
+      const path = [hasStep ? 'repriceLimit' : 'repriceStep'];
+      context.addIssue({
+        code: 'custom',
+        path,
+        message: 'Set both the step and the limit, or neither',
+      });
+      return;
+    }
+    if (!hasLimit) return;
+    if (side === 'ask' && order.repriceLimit > order.price) {
+      context.addIssue({
+        code: 'custom',
+        path: ['repriceLimit'],
+        message: 'Your lowest price can’t be above your asking price',
+      });
+    }
+    if (side === 'bid' && order.repriceLimit < order.price) {
+      context.addIssue({
+        code: 'custom',
+        path: ['repriceLimit'],
+        message: 'Your highest price can’t be below your offer',
+      });
+    }
+  };
+}
+
 /**
  * The body of POST /api/orders, shared with the forms. `price` comes out in cents.
  * An ask names only the copy: its pressing and grade are read from the copy on the server,
- * never trusted from the request.
+ * never trusted from the request. Part 15 adds how long the ad runs (`expiresInDays`) and
+ * an optional "stay on top" rule (`repriceStep`, `repriceLimit`, in cents once parsed).
  */
 export const placeOrderSchema = z.discriminatedUnion(
   'side',
   [
-    z.object({
-      side: z.literal('bid'),
-      releaseId: idSchema('Pick a pressing'),
-      price: priceText,
-      minGrade: MIN_GRADE_FIELD,
-      note: storedTextSchema('note', MAX_ORDER_NOTE_LENGTH),
-    }),
-    z.object({
-      side: z.literal('ask'),
-      copyId: idSchema('Pick the copy you’re selling'),
-      price: priceText,
-    }),
+    z
+      .object({
+        side: z.literal('bid'),
+        releaseId: idSchema('Pick a pressing'),
+        price: priceText,
+        minGrade: MIN_GRADE_FIELD,
+        note: storedTextSchema('note', MAX_ORDER_NOTE_LENGTH),
+        expiresInDays: expiresInDaysSchema,
+        repriceStep: stepText,
+        repriceLimit: limitText,
+      })
+      .superRefine(checkRepricing('bid')),
+    z
+      .object({
+        side: z.literal('ask'),
+        copyId: idSchema('Pick the copy you’re selling'),
+        price: priceText,
+        expiresInDays: expiresInDaysSchema,
+        repriceStep: stepText,
+        repriceLimit: limitText,
+      })
+      .superRefine(checkRepricing('ask')),
   ],
   { error: 'An order must be a bid or an ask' },
 );
 
-export const ORDER_STATUSES = Object.freeze(['open', 'filled', 'cancelled']);
+export const ORDER_STATUSES = Object.freeze(['open', 'filled', 'cancelled', 'expired']);
 
 /** Empty query-string values ("?status=") mean "no filter". */
 export const blankAsMissing = (value) => (value === '' ? undefined : value);

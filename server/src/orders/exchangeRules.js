@@ -212,6 +212,16 @@ const RULES = {
       `Trade ${row.id} doesn't match its orders (people, copy, pressing, price or grade).`,
   },
 
+  // Part 15: an ad whose time is up is expired by the next order on its pressing or by the
+  // once-a-minute sweep, so none stays open long past it (10 minutes allows for a restart).
+  expiry: {
+    sql: `SELECT id, expires_at FROM orders
+           WHERE status = 'open' AND expires_at < now() - interval '10 minutes'
+           ORDER BY id LIMIT ${MAX_EXAMPLES}`,
+    describe: (row) =>
+      `Order ${row.id} is still open, but it expired at ${row.expires_at.toISOString()}.`,
+  },
+
   // Matching happens the moment an order arrives, so no open WANTED ad could take an open
   // FOR SALE ad from someone else: the book is never "crossed".
   uncrossed: {

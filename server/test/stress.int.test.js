@@ -109,7 +109,17 @@ async function act(action, traders) {
   const price = String(action.dollars);
   switch (action.kind) {
     case 'bid':
-      return service.place(user, { side: 'bid', releaseId, price, minGrade: action.grade });
+      // Part 15: one in three rises to stay the best offer, up to $10 more.
+      return service.place(user, {
+        side: 'bid',
+        releaseId,
+        price,
+        minGrade: action.grade,
+        ...(action.seed % 3 === 0 && {
+          repriceStep: '1',
+          repriceLimit: String(action.dollars + 10),
+        }),
+      });
     case 'list': {
       const copies = await query(
         `SELECT id FROM copies WHERE owner_id = $1 AND release_id = $2 AND status = 'in_crate'
@@ -117,7 +127,32 @@ async function act(action, traders) {
         [user.id, releaseId],
       );
       const copy = pick(copies, action.seed);
-      return copy && service.place(user, { side: 'ask', copyId: copy.id, price });
+      // Part 15: one in three follows cheaper rivals down, to $10 less (at least $1).
+      return (
+        copy &&
+        service.place(user, {
+          side: 'ask',
+          copyId: copy.id,
+          price,
+          ...(action.seed % 3 === 0 && {
+            repriceStep: '1',
+            repriceLimit: String(Math.max(1, action.dollars - 10)),
+          }),
+        })
+      );
+    }
+    case 'expire': {
+      // Part 15: an ad's time runs out, and one of the processes sweeps.
+      const open = await query(`SELECT id FROM orders WHERE status = 'open' ORDER BY id`);
+      const order = pick(open, action.seed);
+      if (order) {
+        await query(
+          `UPDATE orders SET created_at = now() - interval '2 days', expires_at = now() - interval '1 day'
+            WHERE id = $1 AND status = 'open'`,
+          [order.id],
+        );
+      }
+      return service.sweepExpired();
     }
     case 'buy': {
       const asks = await query(
@@ -175,7 +210,7 @@ async function act(action, traders) {
 }
 
 const actionArb = fc.record({
-  kind: fc.constantFrom('bid', 'list', 'list', 'buy', 'sell', 'cancel', 'step', 'step'),
+  kind: fc.constantFrom('bid', 'list', 'list', 'buy', 'sell', 'cancel', 'step', 'step', 'expire'),
   trader: fc.nat({ max: TRADERS - 1 }),
   process: fc.nat({ max: 1 }),
   pressing: fc.nat({ max: 1 }),
